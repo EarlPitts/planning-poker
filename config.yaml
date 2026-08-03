@@ -1,0 +1,6 @@
+logger:
+  verbosity: debug
+
+web:
+  port: 8000
+  domain: "localhost"

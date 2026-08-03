@@ -1,0 +1,40 @@
+cabal-version: 3.4
+name:          planning-poker
+version:       0.1.0.0
+
+library
+  hs-source-dirs:   src
+  default-language: Haskell2010
+  ghc-options:      -Wall
+  exposed-modules:
+    PlanningPoker
+    Logger
+    Paths_planning_poker
+    Web
+
+  build-depends:
+    , aeson
+    , base
+    , bytestring
+    , directory
+    , http-types
+    , lens
+    , lucid2
+    , mtl
+    , multipart
+    , random
+    , scotty
+    , sqlite-simple
+    , text
+    , time
+    , wai-extra
+    , yaml
+
+executable planning-poker
+  main-is:          Main.hs
+  hs-source-dirs:   app
+  ghc-options:      -Wall -threaded -rtsopts -with-rtsopts=-N
+  default-language: Haskell2010
+  build-depends:
+    , base
+    , planning-poker
