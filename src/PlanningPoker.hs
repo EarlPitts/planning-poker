@@ -9,13 +9,15 @@ module PlanningPoker (
 import qualified Data.Aeson as A
 import Data.Version (showVersion)
 import qualified Data.Yaml as Yaml
-import qualified Logger
-import qualified Web
-
 import qualified Paths_planning_poker
 import System.Environment (getArgs, getProgName)
 import System.Exit (exitFailure)
 import qualified System.IO as IO
+
+import Data.IORef
+import qualified Logger
+import qualified Poker
+import qualified Web
 
 data Config = Config
   { cLogger :: Logger.Config
@@ -61,6 +63,8 @@ run configPath = do
   errOrConfig <- Yaml.decodeFileEither configPath
   Config{..} <- either (fail . show) return errOrConfig
 
+  stateRef <- newIORef Poker.testState
+
   Logger.withHandle cLogger $ \logger ->
-    Web.withHandle cWeb logger $ \web ->
+    Web.withHandle cWeb logger stateRef $ \web ->
       Web.run web

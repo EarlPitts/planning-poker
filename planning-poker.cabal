@@ -3,13 +3,18 @@ name:          planning-poker
 version:       0.1.0.0
 
 library
-  hs-source-dirs:   src
-  default-language: Haskell2010
-  ghc-options:      -Wall
+  hs-source-dirs:     src
+  default-language:   Haskell2010
+  ghc-options:        -Wall
+  default-extensions:
+    OverloadedStrings
+    RecordWildCards
+
   exposed-modules:
-    PlanningPoker
     Logger
     Paths_planning_poker
+    PlanningPoker
+    Poker
     Web
 
   build-depends:
