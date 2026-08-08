@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: cachix/install-nix-action@v31
+
+      - name: Build derivation
+        run: nix build
+
+      - name: Setup SSH key
+        run: |
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ${{ runner.temp }}/deploy_key
+          chmod 600 ${{ runner.temp }}/deploy_key
+
+      - name: Copy to server
+        env:
+          NIX_SSHOPTS: "-i ${{ runner.temp }}/deploy_key -p3632 -o StrictHostKeyChecking=no"
+        run: nix copy --to ssh://deploy@home.bendeguz.xyz ./result
+      #
+      # - name: Restart service
+      #   env:
+      #     SSHOPTS: "-i ${{ runner.temp }}/deploy_key -p3632 -o StrictHostKeyChecking=no"
+      #   run: ssh $SSHOPTS deploy@home.bendeguz.xyz \
+      #     "ln -sfn $(nix path-info ./result)/bin/badminbot-v3 /srv/badminbot/ && sudo systemctl restart badminbot"

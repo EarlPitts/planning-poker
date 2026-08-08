@@ -19,9 +19,9 @@
         haskell = pkgs.haskellPackages;
       in
       {
-        # packages.default = pkgs.haskell.lib.justStaticExecutables (
-        #   haskell.callCabal2nix "imageboard" ./imageboard { }
-        # );
+        packages.default = pkgs.haskell.lib.justStaticExecutables (
+          haskell.callCabal2nix "planning-poker" ./. { }
+        );
 
         devShells.default = pkgs.mkShell {
           packages = with pkgs; [
