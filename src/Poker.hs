@@ -1,6 +1,5 @@
 module Poker where
 
-import Data.List
 import Data.Text (Text)
 import qualified Data.Text as T
 
@@ -13,10 +12,13 @@ data Player = Player
   }
   deriving (Eq, Show)
 
-data State = State
-  { sPlayers :: [Player]
-  , sIsRevealed :: Bool
-  }
+data State
+  = Stopped
+  | InProgress
+      { sPlayers :: [Player]
+      , sIsRevealed :: Bool
+      , sHost :: T.Text
+      }
   deriving (Eq, Show)
 
 mkVote :: String -> Maybe Vote
@@ -25,24 +27,27 @@ mkVote "2" = Just Two
 mkVote _ = Nothing
 
 initState :: State
-initState = State [] False
+initState = Stopped
 
 testState =
-  State
+  InProgress
     [ Player (Just One) "Bela" True
     , Player (Just Two) "Jani" False
     , Player Nothing "Jeno" False
     ]
     False
+    "Bela"
 
 join :: Player -> State -> State
+join _ Stopped = Stopped
 join p s = s{sPlayers = p : sPlayers s}
 
 newPlayer :: Text -> Bool -> Player
 newPlayer = Player Nothing
 
 modifyPlayerVote :: Text -> Vote -> State -> State
-modifyPlayerVote name v s@State{..} =
+modifyPlayerVote _ _ Stopped = Stopped
+modifyPlayerVote name v s@InProgress{..} =
   s{sPlayers = update <$> sPlayers}
  where
   update p = if pName p == name then vote p v else p
@@ -51,13 +56,15 @@ vote :: Player -> Vote -> Player
 vote p v = p{pVote = Just v}
 
 reveal :: State -> State
+reveal Stopped = Stopped
 reveal s = s{sIsRevealed = True}
 
 reset :: State -> State
+reset Stopped = Stopped
 reset s = s{sIsRevealed = False, sPlayers = resetVote <$> sPlayers s}
 
 end :: State -> State
-end s = s{sIsRevealed = False, sPlayers = mempty}
+end _ = Stopped
 
 resetVote :: Player -> Player
 resetVote p = p{pVote = Nothing}

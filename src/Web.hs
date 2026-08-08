@@ -85,21 +85,26 @@ app :: Handle -> ScottyM ()
 app h = do
   Scotty.get "/" $ do
     state <- liftIO $ readIORef (hState h)
-    Scotty.html $ renderText (view state)
+    Scotty.html $ renderText (mainView state)
 
   Scotty.get "/player/:name" $ do
     pName <- Scotty.pathParam "name"
     state <- liftIO $ readIORef (hState h)
     Scotty.html $ renderText (playerView pName state)
 
+  Scotty.post "/host" $ do
+    pName <- Scotty.formParam "name"
+    let p = newPlayer pName False
+        state = InProgress [p] False pName
+    liftIO $ writeIORef (hState h) state
+    Scotty.html $ renderText (hostView pName state)
+
   Scotty.post "/newPlayer" $ do
     pName <- Scotty.formParam "name"
     let p = newPlayer pName False
     liftIO $ modifyIORef (hState h) (join p)
     state <- liftIO $ readIORef (hState h)
-    if (length (sPlayers state) == 1)
-      then Scotty.html $ renderText (hostView pName state)
-      else Scotty.html $ renderText (playerView pName state)
+    Scotty.html $ renderText (playerView pName state)
 
   Scotty.post "/vote/:name/:vote" $ do
     pVote <- mkVote <$> Scotty.pathParam "vote"
@@ -109,7 +114,9 @@ app h = do
         pName <- Scotty.pathParam "name"
         liftIO $ modifyIORef (hState h) (modifyPlayerVote pName v)
         state <- liftIO $ readIORef (hState h)
-        Scotty.html $ renderText (playerView pName state)
+        if (sHost state == pName)
+          then Scotty.html $ renderText (hostView pName state)
+          else Scotty.html $ renderText (playerView pName state)
 
   Scotty.post "/reveal" $ do
     liftIO $ modifyIORef (hState h) reveal
@@ -139,21 +146,26 @@ template title body = doctypehtml_ $ do
     -- header_ $ a_ [href_ "/"] "imageboard"
     body
 
-view :: State -> Html ()
-view State{..} = template "Planning Poker" $
-  div_ [id_ "parent-div"] $ do
-    h2_ "Planning Poker"
-    traverse_ (viewPlayer sIsRevealed) sPlayers
-    form_
-      [ hxPost_ "/newPlayer"
-      , hxTarget_ "#parent-div"
-      ]
-      $ do
-        input_ [name_ "name", type_ "text"]
-        button_ "Join"
+mainView :: State -> Html ()
+mainView s = template "Planning Poker" $ do
+  case s of
+    InProgress{..} ->
+      div_ [id_ "parent-div"] $ do
+        h2_ "Planning Poker"
+        traverse_ (viewPlayer sIsRevealed) sPlayers
+        form_ [hxPost_ "/newPlayer", hxTarget_ "#parent-div"] $ do
+          input_ [name_ "name", type_ "text"]
+          button_ "Join"
+    Stopped ->
+      div_ [id_ "parent-div"] $ do
+        h2_ "Planning Poker"
+        form_ [hxPost_ "/host", hxTarget_ "#parent-div"] $ do
+          input_ [name_ "name", type_ "text"]
+          button_ "Start new session as Host"
 
 playerView :: Text -> State -> Html ()
-playerView name State{..} = template "Planning Poker"
+playerView _ Stopped = p_ "Session ended"
+playerView name InProgress{..} = template "Planning Poker"
   $ div_
     [ id_ "parent-div"
     , hxGet_ $ "/player/" <> name
