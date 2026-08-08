@@ -15,19 +15,21 @@ import Control.Monad (void)
 import Control.Monad.Trans (liftIO)
 import qualified Data.Aeson as A
 import qualified Data.ByteString as BS
+import Data.Foldable
 import Data.IORef
 import Data.Int (Int64)
+import Data.List
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
 import qualified Logger
 import Lucid
+import Lucid.Base (Attributes, makeAttributes)
 import Network.HTTP.Types.Status (badRequest400, status404)
 import Web.Scotty (ScottyM)
 import qualified Web.Scotty as Scotty
 
-import Data.Foldable
 import Poker
 
 data Config = Config
@@ -67,6 +69,13 @@ withHandle ::
 withHandle config logger state f =
   f $ Handle config logger state
 
+hxPost_, hxGet_, hxTarget_, hxSwap_ :: Text -> Attributes
+hxPost_ = makeAttributes "hx-post"
+hxGet_ = makeAttributes "hx-get"
+hxTarget_ = makeAttributes "hx-target"
+hxTrigger_ = makeAttributes "hx-trigger"
+hxSwap_ = makeAttributes "hx-swap"
+
 run :: Handle -> IO ()
 run h = Scotty.scotty port (app h)
  where
@@ -78,10 +87,18 @@ app h = do
     state <- liftIO $ readIORef (hState h)
     Scotty.html $ renderText (view state)
 
-  Scotty.post "/newPlayer/:name" $ do
+  Scotty.get "/player/:name" $ do
     pName <- Scotty.pathParam "name"
-    let p = newPlayer pName
+    state <- liftIO $ readIORef (hState h)
+    Scotty.html $ renderText (playerView pName state)
+
+  Scotty.post "/newPlayer" $ do
+    pName <- Scotty.formParam "name"
+    let p = newPlayer pName False
     liftIO $ modifyIORef (hState h) (join p)
+    state <- liftIO $ readIORef (hState h)
+    Scotty.html $ renderText (playerView pName state)
+
   Scotty.post "/vote/:name/:vote" $ do
     pVote <- mkVote <$> Scotty.pathParam "vote"
     case pVote of
@@ -89,8 +106,12 @@ app h = do
       Just v -> do
         pName <- Scotty.pathParam "name"
         liftIO $ modifyIORef (hState h) (modifyPlayerVote pName v)
+        state <- liftIO $ readIORef (hState h)
+        Scotty.html $ renderText (playerView pName state)
+
   Scotty.post "/reveal" $ do
     liftIO $ modifyIORef (hState h) reveal
+
   Scotty.post "/reset" $ do
     liftIO $ modifyIORef (hState h) reset
 
@@ -114,12 +135,43 @@ template title body = doctypehtml_ $ do
     body
 
 view :: State -> Html ()
-view State{..} = template "Planning Poker" $ do
-  h2_ "Planning Poker"
-  traverse_ (viewPlayers sIsRevealed) sPlayers
+view State{..} = template "Planning Poker" $
+  div_ [id_ "parent-div"] $ do
+    h2_ "Planning Poker"
+    traverse_ (viewPlayer sIsRevealed) sPlayers
+    form_
+      [ hxPost_ "/newPlayer"
+      , hxTarget_ "#parent-div"
+      ]
+      $ do
+        input_ [name_ "name", type_ "text"]
+        button_ "Join"
 
-viewPlayers :: Bool -> Player -> Html ()
-viewPlayers revealed Player{..} = div_ $ do
+playerView :: Text -> State -> Html ()
+playerView name State{..} = template "Planning Poker"
+  $ div_
+    [ id_ "parent-div"
+    , hxGet_ $ "/player/" <> name
+    , hxTrigger_ "every 2s"
+    ]
+  $ do
+    h2_ "Planning Poker"
+    let (p, rest) = partition (\p -> pName p == name) sPlayers
+    traverse_ (viewPlayer True) p
+    traverse_ (viewPlayer sIsRevealed) rest
+    button_
+      [ hxPost_ $ "/vote/" <> name <> "/1"
+      , hxTarget_ "#parent-div"
+      ]
+      "1"
+    button_
+      [ hxPost_ $ "/vote/" <> name <> "/2"
+      , hxTarget_ "#parent-div"
+      ]
+      "2"
+
+viewPlayer :: Bool -> Player -> Html ()
+viewPlayer revealed Player{..} = div_ $ do
   span_ $ toHtml pName
   ": "
   span_ $

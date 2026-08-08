@@ -9,6 +9,7 @@ data Vote = One | Two deriving (Eq, Show)
 data Player = Player
   { pVote :: Maybe Vote
   , pName :: T.Text
+  , pIsHost :: Bool
   }
   deriving (Eq, Show)
 
@@ -28,17 +29,17 @@ initState = State [] False
 
 testState =
   State
-    [ Player (Just One) "Bela"
-    , Player (Just Two) "Jani"
-    , Player Nothing "Jeno"
+    [ Player (Just One) "Bela" True
+    , Player (Just Two) "Jani" False
+    , Player Nothing "Jeno" False
     ]
     False
 
 join :: Player -> State -> State
 join p s = s{sPlayers = p : sPlayers s}
 
-newPlayer :: Text -> Player
-newPlayer = Player Nothing
+newPlayer :: Text -> Bool -> Player
+newPlayer = Player Nothing 
 
 modifyPlayerVote :: Text -> Vote -> State -> State
 modifyPlayerVote name v s@State{..} =
