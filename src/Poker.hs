@@ -39,7 +39,7 @@ join :: Player -> State -> State
 join p s = s{sPlayers = p : sPlayers s}
 
 newPlayer :: Text -> Bool -> Player
-newPlayer = Player Nothing 
+newPlayer = Player Nothing
 
 modifyPlayerVote :: Text -> Vote -> State -> State
 modifyPlayerVote name v s@State{..} =
@@ -55,6 +55,9 @@ reveal s = s{sIsRevealed = True}
 
 reset :: State -> State
 reset s = s{sIsRevealed = False, sPlayers = resetVote <$> sPlayers s}
+
+end :: State -> State
+end s = s{sIsRevealed = False, sPlayers = mempty}
 
 resetVote :: Player -> Player
 resetVote p = p{pVote = Nothing}

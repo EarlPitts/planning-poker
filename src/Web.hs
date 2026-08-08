@@ -97,7 +97,9 @@ app h = do
     let p = newPlayer pName False
     liftIO $ modifyIORef (hState h) (join p)
     state <- liftIO $ readIORef (hState h)
-    Scotty.html $ renderText (playerView pName state)
+    if (length (sPlayers state) == 1)
+      then Scotty.html $ renderText (hostView pName state)
+      else Scotty.html $ renderText (playerView pName state)
 
   Scotty.post "/vote/:name/:vote" $ do
     pVote <- mkVote <$> Scotty.pathParam "vote"
@@ -114,6 +116,9 @@ app h = do
 
   Scotty.post "/reset" $ do
     liftIO $ modifyIORef (hState h) reset
+
+  Scotty.post "/end" $ do
+    liftIO $ modifyIORef (hState h) end
 
   Scotty.get "/assets/style.css" $ do
     Scotty.setHeader "Content-Type" "text/css"
@@ -169,6 +174,25 @@ playerView name State{..} = template "Planning Poker"
       , hxTarget_ "#parent-div"
       ]
       "2"
+
+hostView :: Text -> State -> Html ()
+hostView name state = do
+  playerView name state
+  button_
+    [ hxPost_ "/reveal"
+    , hxSwap_ "none"
+    ]
+    "Reveal"
+  button_
+    [ hxPost_ "/reset"
+    , hxSwap_ "none"
+    ]
+    "Reset Votes"
+  button_
+    [ hxPost_ "/end"
+    , hxSwap_ "none"
+    ]
+    "End"
 
 viewPlayer :: Bool -> Player -> Html ()
 viewPlayer revealed Player{..} = div_ $ do

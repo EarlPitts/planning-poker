@@ -63,7 +63,7 @@ run configPath = do
   errOrConfig <- Yaml.decodeFileEither configPath
   Config{..} <- either (fail . show) return errOrConfig
 
-  stateRef <- newIORef Poker.testState
+  stateRef <- newIORef Poker.initState
 
   Logger.withHandle cLogger $ \logger ->
     Web.withHandle cWeb logger stateRef $ \web ->
