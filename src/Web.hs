@@ -115,10 +115,18 @@ app h = do
     pName <- Scotty.formParam "name"
     pId <- liftIO nextRandom
     let p = newPlayer pName pId False
-        state = InProgress [p] False pId
-    liftIO $ writeIORef (hState h) state
-    Scotty.setSimpleCookie "id" (toText pId)
-    Scotty.html $ renderText (hostView pId state)
+    state <- liftIO $ readIORef (hState h)
+    case state of
+      Stopped -> do
+        let state = InProgress [p] False pId
+        liftIO $ writeIORef (hState h) state
+        Scotty.setSimpleCookie "id" (toText pId)
+        Scotty.html $ renderText (hostView pId state)
+      InProgress _ _ _ -> do
+        liftIO $ modifyIORef (hState h) (join p)
+        state <- liftIO $ readIORef (hState h)
+        Scotty.setSimpleCookie "id" (toText pId)
+        Scotty.html $ renderText (playerView pId state)
 
   Scotty.post "/newPlayer" $ do
     pName <- Scotty.formParam "name"

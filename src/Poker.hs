@@ -54,7 +54,7 @@ mkVote "1.5" = Just OneAndHalf
 mkVote "2" = Just Two
 mkVote "3" = Just Three
 mkVote "4" = Just Four
-mkVote "Five" = Just Four
+mkVote "5" = Just Five
 mkVote _ = Nothing
 
 initState :: State
