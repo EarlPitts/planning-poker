@@ -28,7 +28,7 @@ import Data.UUID.V4
 import qualified Logger
 import Lucid
 import Lucid.Base (Attributes, makeAttributes)
-import Network.HTTP.Types.Status (badRequest400, status404)
+import Network.HTTP.Types.Status (badRequest400, status404, unauthorized401)
 import Web.Scotty (ScottyM)
 import qualified Web.Scotty as Scotty
 
@@ -86,8 +86,22 @@ run h = Scotty.scotty port (app h)
 app :: Handle -> ScottyM ()
 app h = do
   Scotty.get "/" $ do
+    existingId <- Scotty.getCookie "id"
+    liftIO $ Logger.logInfo (hLogger h) (show existingId)
     state <- liftIO $ readIORef (hState h)
-    Scotty.html $ renderText (mainView state)
+    case existingId of
+      Nothing -> do
+        Scotty.html $ renderText (mainView state)
+      Just mId -> do
+        case fromText mId of
+          Nothing -> Scotty.html $ renderText (mainView state)
+          Just id -> do
+            case findPlayer id state of
+              Nothing -> Scotty.html $ renderText (mainView state)
+              Just p -> do
+                if (sHost state == pId p)
+                  then Scotty.html $ renderText (hostView id state)
+                  else Scotty.html $ renderText (playerView id state)
 
   Scotty.get "/player/:id" $ do
     mId <- Scotty.pathParam "id"
@@ -103,6 +117,7 @@ app h = do
     let p = newPlayer pName pId False
         state = InProgress [p] False pId
     liftIO $ writeIORef (hState h) state
+    Scotty.setSimpleCookie "id" (toText pId)
     Scotty.html $ renderText (hostView pId state)
 
   Scotty.post "/newPlayer" $ do
@@ -111,6 +126,7 @@ app h = do
     let p = newPlayer pName pId False
     liftIO $ modifyIORef (hState h) (join p)
     state <- liftIO $ readIORef (hState h)
+    Scotty.setSimpleCookie "id" (toText pId)
     Scotty.html $ renderText (playerView pId state)
 
   Scotty.post "/vote/:id/:vote" $ do
@@ -125,7 +141,7 @@ app h = do
             liftIO $ modifyIORef (hState h) (modifyPlayerVote pId v)
             state <- liftIO $ readIORef (hState h)
             if (sHost state == pId)
-              then Scotty.html $ renderText (hostView pId state)
+              then Scotty.html $ renderText (hostView pId state) -- TODO
               else Scotty.html $ renderText (playerView pId state)
 
   Scotty.post "/reveal" $ do

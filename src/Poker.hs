@@ -1,5 +1,6 @@
 module Poker where
 
+import Data.List (find)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.UUID
@@ -65,6 +66,10 @@ join p s = s{sPlayers = p : sPlayers s}
 
 newPlayer :: Text -> UUID -> Bool -> Player
 newPlayer = Player Nothing
+
+findPlayer :: UUID -> State -> Maybe Player
+findPlayer _ Stopped = Nothing
+findPlayer id InProgress{..} = find (\p -> pId p == id) sPlayers
 
 modifyPlayerVote :: UUID -> Vote -> State -> State
 modifyPlayerVote _ _ Stopped = Stopped
