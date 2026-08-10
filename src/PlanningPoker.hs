@@ -7,14 +7,15 @@ module PlanningPoker (
 ) where
 
 import qualified Data.Aeson as A
+import Data.IORef
 import Data.Version (showVersion)
 import qualified Data.Yaml as Yaml
 import qualified Paths_planning_poker
 import System.Environment (getArgs, getProgName)
 import System.Exit (exitFailure)
+import System.IO (BufferMode (..), stdout)
 import qualified System.IO as IO
 
-import Data.IORef
 import qualified Logger
 import qualified Poker
 import qualified Web
@@ -57,6 +58,7 @@ main = do
 
 run :: FilePath -> IO ()
 run configPath = do
+  IO.hSetBuffering stdout LineBuffering
   IO.hPutStrLn IO.stderr $
     "Booting planning-poker v" ++ showVersion Paths_planning_poker.version
 
