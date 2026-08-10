@@ -28,7 +28,7 @@ library
     , mtl
     , multipart
     , random
-    , scotty
+    , scotty == 0.22
     , sqlite-simple
     , text
     , time

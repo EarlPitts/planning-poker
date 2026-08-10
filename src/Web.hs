@@ -31,6 +31,7 @@ import Lucid.Base (Attributes, makeAttributes)
 import Network.HTTP.Types.Status (badRequest400, status404, unauthorized401)
 import Web.Scotty (ScottyM)
 import qualified Web.Scotty as Scotty
+import qualified Web.Scotty.Cookie as Scotty
 
 import Poker
 
