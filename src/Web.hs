@@ -121,6 +121,7 @@ app h = do
       Stopped -> do
         let state = InProgress [p] False pId
         liftIO $ writeIORef (hState h) state
+        liftIO $ Logger.logInfo (hLogger h) ("Session started by " <> (T.unpack pName))
         Scotty.setSimpleCookie "id" (toText pId)
         Scotty.html $ renderText (hostView pId state)
       InProgress _ _ _ -> do
@@ -134,6 +135,7 @@ app h = do
     pId <- liftIO nextRandom
     let p = newPlayer pName pId False
     liftIO $ modifyIORef (hState h) (join p)
+    liftIO $ Logger.logInfo (hLogger h) ("Player " <> (T.unpack pName) <> " joined")
     state <- liftIO $ readIORef (hState h)
     Scotty.setSimpleCookie "id" (toText pId)
     Scotty.html $ renderText (playerView pId state)
