@@ -3,7 +3,28 @@ module Poker where
 import Data.Text (Text)
 import qualified Data.Text as T
 
-data Vote = One | Two deriving (Eq, Show)
+data Vote
+  = Instant
+  | Quarter
+  | Half
+  | One
+  | OneAndHalf
+  | Two
+  | Three
+  | Four
+  | Five
+  deriving (Eq, Enum, Bounded)
+
+instance Show Vote where
+  show Instant = "0.1"
+  show Quarter = "0.25"
+  show Half = "0.5"
+  show One = "1"
+  show OneAndHalf = "1.5"
+  show Two = "2"
+  show Three = "3"
+  show Four = "4"
+  show Five = "5"
 
 data Player = Player
   { pVote :: Maybe Vote

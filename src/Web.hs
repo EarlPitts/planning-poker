@@ -176,16 +176,18 @@ playerView name InProgress{..} = template "Planning Poker"
     let (p, rest) = partition (\p -> pName p == name) sPlayers
     traverse_ (viewPlayer True) p
     traverse_ (viewPlayer sIsRevealed) rest
+    voteButtons name
+
+voteButtons :: Text -> Html ()
+voteButtons name = traverse_ (btn . T.pack . show) ([minBound .. maxBound] :: [Vote])
+ where
+  btn :: Text -> Html ()
+  btn num =
     button_
-      [ hxPost_ $ "/vote/" <> name <> "/1"
+      [ hxPost_ $ "/vote/" <> name <> "/" <> num
       , hxTarget_ "#parent-div"
       ]
-      "1"
-    button_
-      [ hxPost_ $ "/vote/" <> name <> "/2"
-      , hxTarget_ "#parent-div"
-      ]
-      "2"
+      (toHtml num)
 
 hostView :: Text -> State -> Html ()
 hostView name state = do
