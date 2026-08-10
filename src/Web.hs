@@ -23,6 +23,8 @@ import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
+import Data.UUID
+import Data.UUID.V4
 import qualified Logger
 import Lucid
 import Lucid.Base (Attributes, makeAttributes)
@@ -87,36 +89,44 @@ app h = do
     state <- liftIO $ readIORef (hState h)
     Scotty.html $ renderText (mainView state)
 
-  Scotty.get "/player/:name" $ do
-    pName <- Scotty.pathParam "name"
-    state <- liftIO $ readIORef (hState h)
-    Scotty.html $ renderText (playerView pName state)
+  Scotty.get "/player/:id" $ do
+    mId <- Scotty.pathParam "id"
+    case fromString mId of
+      Nothing -> Scotty.status badRequest400
+      Just pId -> do
+        state <- liftIO $ readIORef (hState h)
+        Scotty.html $ renderText (playerView pId state)
 
   Scotty.post "/host" $ do
     pName <- Scotty.formParam "name"
-    let p = newPlayer pName False
-        state = InProgress [p] False pName
+    pId <- liftIO nextRandom
+    let p = newPlayer pName pId False
+        state = InProgress [p] False pId
     liftIO $ writeIORef (hState h) state
-    Scotty.html $ renderText (hostView pName state)
+    Scotty.html $ renderText (hostView pId state)
 
   Scotty.post "/newPlayer" $ do
     pName <- Scotty.formParam "name"
-    let p = newPlayer pName False
+    pId <- liftIO nextRandom
+    let p = newPlayer pName pId False
     liftIO $ modifyIORef (hState h) (join p)
     state <- liftIO $ readIORef (hState h)
-    Scotty.html $ renderText (playerView pName state)
+    Scotty.html $ renderText (playerView pId state)
 
-  Scotty.post "/vote/:name/:vote" $ do
+  Scotty.post "/vote/:id/:vote" $ do
     pVote <- mkVote <$> Scotty.pathParam "vote"
     case pVote of
       Nothing -> Scotty.status badRequest400
       Just v -> do
-        pName <- Scotty.pathParam "name"
-        liftIO $ modifyIORef (hState h) (modifyPlayerVote pName v)
-        state <- liftIO $ readIORef (hState h)
-        if (sHost state == pName)
-          then Scotty.html $ renderText (hostView pName state)
-          else Scotty.html $ renderText (playerView pName state)
+        mId <- Scotty.pathParam "id"
+        case fromString mId of
+          Nothing -> Scotty.status badRequest400
+          Just pId -> do
+            liftIO $ modifyIORef (hState h) (modifyPlayerVote pId v)
+            state <- liftIO $ readIORef (hState h)
+            if (sHost state == pId)
+              then Scotty.html $ renderText (hostView pId state)
+              else Scotty.html $ renderText (playerView pId state)
 
   Scotty.post "/reveal" $ do
     liftIO $ modifyIORef (hState h) reveal
@@ -163,35 +173,35 @@ mainView s = template "Planning Poker" $ do
           input_ [name_ "name", type_ "text"]
           button_ "Start new session as Host"
 
-playerView :: Text -> State -> Html ()
+playerView :: UUID -> State -> Html ()
 playerView _ Stopped = p_ "Session ended"
-playerView name InProgress{..} = template "Planning Poker"
+playerView id InProgress{..} = template "Planning Poker"
   $ div_
     [ id_ "parent-div"
-    , hxGet_ $ "/player/" <> name
+    , hxGet_ $ "/player/" <> (toText id)
     , hxTrigger_ "every 2s"
     ]
   $ do
     h2_ "Planning Poker"
-    let (p, rest) = partition (\p -> pName p == name) sPlayers
+    let (p, rest) = partition (\p -> pId p == id) sPlayers
     traverse_ (viewPlayer True) p
     traverse_ (viewPlayer sIsRevealed) rest
-    voteButtons name
+    voteButtons id
 
-voteButtons :: Text -> Html ()
-voteButtons name = traverse_ (btn . T.pack . show) ([minBound .. maxBound] :: [Vote])
+voteButtons :: UUID -> Html ()
+voteButtons pId = traverse_ (btn . T.pack . show) ([minBound .. maxBound] :: [Vote])
  where
   btn :: Text -> Html ()
   btn num =
     button_
-      [ hxPost_ $ "/vote/" <> name <> "/" <> num
+      [ hxPost_ $ "/vote/" <> (toText pId) <> "/" <> num
       , hxTarget_ "#parent-div"
       ]
       (toHtml num)
 
-hostView :: Text -> State -> Html ()
-hostView name state = do
-  playerView name state
+hostView :: UUID -> State -> Html ()
+hostView id state = do
+  playerView id state
   button_
     [ hxPost_ "/reveal"
     , hxSwap_ "none"

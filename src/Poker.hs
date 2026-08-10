@@ -2,6 +2,7 @@ module Poker where
 
 import Data.Text (Text)
 import qualified Data.Text as T
+import Data.UUID
 
 data Vote
   = Instant
@@ -29,6 +30,7 @@ instance Show Vote where
 data Player = Player
   { pVote :: Maybe Vote
   , pName :: T.Text
+  , pId :: UUID
   , pIsHost :: Bool
   }
   deriving (Eq, Show)
@@ -38,40 +40,38 @@ data State
   | InProgress
       { sPlayers :: [Player]
       , sIsRevealed :: Bool
-      , sHost :: T.Text
+      , sHost :: UUID
       }
   deriving (Eq, Show)
 
 mkVote :: String -> Maybe Vote
+mkVote "0.1" = Just Instant
+mkVote "0.25" = Just Quarter
+mkVote "0.5" = Just Half
 mkVote "1" = Just One
+mkVote "1.5" = Just OneAndHalf
 mkVote "2" = Just Two
+mkVote "3" = Just Three
+mkVote "4" = Just Four
+mkVote "Five" = Just Four
 mkVote _ = Nothing
 
 initState :: State
 initState = Stopped
 
-testState =
-  InProgress
-    [ Player (Just One) "Bela" True
-    , Player (Just Two) "Jani" False
-    , Player Nothing "Jeno" False
-    ]
-    False
-    "Bela"
-
 join :: Player -> State -> State
 join _ Stopped = Stopped
 join p s = s{sPlayers = p : sPlayers s}
 
-newPlayer :: Text -> Bool -> Player
+newPlayer :: Text -> UUID -> Bool -> Player
 newPlayer = Player Nothing
 
-modifyPlayerVote :: Text -> Vote -> State -> State
+modifyPlayerVote :: UUID -> Vote -> State -> State
 modifyPlayerVote _ _ Stopped = Stopped
-modifyPlayerVote name v s@InProgress{..} =
+modifyPlayerVote id v s@InProgress{..} =
   s{sPlayers = update <$> sPlayers}
  where
-  update p = if pName p == name then vote p v else p
+  update p = if pId p == id then vote p v else p
 
 vote :: Player -> Vote -> Player
 vote p v = p{pVote = Just v}
