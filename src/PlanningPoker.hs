@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
-module Main (
+module PlanningPoker (
   Config (..),
   main,
 ) where
