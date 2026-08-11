@@ -1,4 +1,4 @@
-module Poker where
+module Core where
 
 import Data.List (find)
 import Data.Text (Text)

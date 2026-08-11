@@ -11,29 +11,25 @@ module Web (
 ) where
 
 import Control.Applicative (empty, (<|>))
-import Control.Monad (void)
 import Control.Monad.Trans (liftIO)
 import qualified Data.Aeson as A
-import qualified Data.ByteString as BS
 import Data.Foldable
 import Data.IORef
-import Data.Int (Int64)
 import Data.List
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
-import qualified Data.Text.Lazy as TL
 import Data.UUID
 import Data.UUID.V4
 import qualified Logger
 import Lucid
-import Lucid.Base (Attributes, makeAttributes)
-import Network.HTTP.Types.Status (badRequest400, status404, unauthorized401)
-import Web.Scotty (ScottyM)
+import Lucid.Base (makeAttributes)
+import Network.HTTP.Types.Status (badRequest400)
+import Web.Scotty (ActionM, ScottyM)
 import qualified Web.Scotty as Scotty
 import qualified Web.Scotty.Cookie as Scotty
 
-import Poker
+import Core
 
 data Config = Config
   { cPort :: Maybe Int
@@ -88,21 +84,15 @@ app :: Handle -> ScottyM ()
 app h = do
   Scotty.get "/" $ do
     existingId <- Scotty.getCookie "id"
-    liftIO $ Logger.logInfo (hLogger h) (show existingId)
     state <- liftIO $ readIORef (hState h)
-    case existingId of
-      Nothing -> do
-        Scotty.html $ renderText (mainView state)
-      Just mId -> do
-        case fromText mId of
-          Nothing -> Scotty.html $ renderText (mainView state)
-          Just id -> do
-            case findPlayer id state of
-              Nothing -> Scotty.html $ renderText (mainView state)
-              Just p -> do
-                if (sHost state == pId p)
-                  then Scotty.html $ renderText (hostView id state)
-                  else Scotty.html $ renderText (playerView id state)
+    let view = do
+          pid <- fromText =<< existingId
+          p <- findPlayer pid state
+          pure $
+            if (sHost state == pId p)
+              then hostView pid state
+              else playerView pid state
+    Scotty.html $ renderText $ fromMaybe (mainView state) view
 
   Scotty.get "/player/:id" $ do
     mId <- Scotty.pathParam "id"
@@ -118,42 +108,31 @@ app h = do
     let p = newPlayer pName pId False
     state <- liftIO $ readIORef (hState h)
     case state of
-      Stopped -> do
-        let state = InProgress [p] False pId
-        liftIO $ writeIORef (hState h) state
-        liftIO $ Logger.logInfo (hLogger h) ("Session started by " <> (T.unpack pName))
-        Scotty.setSimpleCookie "id" (toText pId)
-        Scotty.html $ renderText (hostView pId state)
-      InProgress _ _ _ -> do
-        liftIO $ modifyIORef (hState h) (join p)
-        state <- liftIO $ readIORef (hState h)
-        Scotty.setSimpleCookie "id" (toText pId)
-        Scotty.html $ renderText (playerView pId state)
+      Stopped -> hostJoin h p
+      InProgress _ _ _ -> playerJoin h p
 
   Scotty.post "/newPlayer" $ do
     pName <- Scotty.formParam "name"
     pId <- liftIO nextRandom
     let p = newPlayer pName pId False
-    liftIO $ modifyIORef (hState h) (join p)
-    liftIO $ Logger.logInfo (hLogger h) ("Player " <> (T.unpack pName) <> " joined")
-    state <- liftIO $ readIORef (hState h)
-    Scotty.setSimpleCookie "id" (toText pId)
-    Scotty.html $ renderText (playerView pId state)
+    playerJoin h p
 
   Scotty.post "/vote/:id/:vote" $ do
-    pVote <- mkVote <$> Scotty.pathParam "vote"
-    case pVote of
+    mVote <- mkVote <$> Scotty.pathParam "vote"
+    case mVote of
       Nothing -> Scotty.status badRequest400
-      Just v -> do
+      Just pVote -> do
         mId <- Scotty.pathParam "id"
         case fromString mId of
           Nothing -> Scotty.status badRequest400
           Just pId -> do
-            liftIO $ modifyIORef (hState h) (modifyPlayerVote pId v)
+            liftIO $ modifyIORef (hState h) (modifyPlayerVote pId pVote)
             state <- liftIO $ readIORef (hState h)
-            if (sHost state == pId)
-              then Scotty.html $ renderText (hostView pId state) -- TODO
-              else Scotty.html $ renderText (playerView pId state)
+            Scotty.html $
+              renderText $
+                if (sHost state == pId)
+                  then hostView pId state
+                  else playerView pId state
 
   Scotty.post "/reveal" $ do
     liftIO $ modifyIORef (hState h) reveal
@@ -167,6 +146,22 @@ app h = do
   Scotty.get "/assets/style.css" $ do
     Scotty.setHeader "Content-Type" "text/css"
     Scotty.file "assets/style.css"
+
+playerJoin :: Handle -> Player -> ActionM ()
+playerJoin h p = do
+  liftIO $ modifyIORef (hState h) (join p)
+  liftIO $ Logger.logInfo (hLogger h) ("Player " <> (T.unpack $ pName p) <> " joined")
+  state <- liftIO $ readIORef (hState h)
+  Scotty.setSimpleCookie "id" (toText $ pId p)
+  Scotty.html $ renderText (playerView (pId p) state)
+
+hostJoin :: Handle -> Player -> ActionM ()
+hostJoin h p = do
+  let state = InProgress [p] False (pId p)
+  liftIO $ writeIORef (hState h) state
+  liftIO $ Logger.logInfo (hLogger h) ("Session started by " <> (T.unpack $ pName p))
+  Scotty.setSimpleCookie "id" (toText $ pId p)
+  Scotty.html $ renderText (hostView (pId p) state)
 
 template :: T.Text -> Html () -> Html ()
 template title body = doctypehtml_ $ do

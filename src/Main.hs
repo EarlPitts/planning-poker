@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
-module PlanningPoker (
+module Main (
   Config (..),
   main,
 ) where
@@ -17,7 +17,7 @@ import System.IO (BufferMode (..), stdout)
 import qualified System.IO as IO
 
 import qualified Logger
-import qualified Poker
+import qualified Core
 import qualified Web
 
 data Config = Config
@@ -65,7 +65,7 @@ run configPath = do
   errOrConfig <- Yaml.decodeFileEither configPath
   Config{..} <- either (fail . show) return errOrConfig
 
-  stateRef <- newIORef Poker.initState
+  stateRef <- newIORef Core.initState
 
   Logger.withHandle cLogger $ \logger ->
     Web.withHandle cWeb logger stateRef $ \web ->

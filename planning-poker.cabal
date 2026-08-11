@@ -13,8 +13,8 @@ library
   exposed-modules:
     Logger
     Paths_planning_poker
-    PlanningPoker
-    Poker
+    Main
+    Core
     Web
 
   build-depends:
