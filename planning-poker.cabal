@@ -30,6 +30,7 @@ library
     , random
     , scotty == 0.22
     , sqlite-simple
+    , stm
     , text
     , time
     , uuid

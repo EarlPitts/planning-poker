@@ -7,7 +7,7 @@ module Main (
 ) where
 
 import qualified Data.Aeson as A
-import Data.IORef
+import Control.Concurrent.STM
 import Data.Version (showVersion)
 import qualified Data.Yaml as Yaml
 import qualified Paths_planning_poker
@@ -65,7 +65,7 @@ run configPath = do
   errOrConfig <- Yaml.decodeFileEither configPath
   Config{..} <- either (fail . show) return errOrConfig
 
-  stateRef <- newIORef Core.initState
+  stateRef <- newTVarIO Core.initState
 
   Logger.withHandle cLogger $ \logger ->
     Web.withHandle cWeb logger stateRef $ \web ->
