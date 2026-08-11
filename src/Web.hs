@@ -24,7 +24,7 @@ import Data.UUID.V4
 import qualified Logger
 import Lucid
 import Lucid.Base (makeAttributes)
-import Network.HTTP.Types.Status (badRequest400)
+import Network.HTTP.Types.Status (badRequest400, unauthorized401)
 import Web.Scotty (ActionM, ScottyM)
 import qualified Web.Scotty as Scotty
 import qualified Web.Scotty.Cookie as Scotty
@@ -135,18 +135,29 @@ app h = do
                   then hostView pId state
                   else playerView pId state
 
-  Scotty.post "/reveal" $ do
+  Scotty.post "/reveal" $ auth h $ do
     liftIO $ atomically $ modifyTVar' (hState h) reveal
 
-  Scotty.post "/reset" $ do
+  Scotty.post "/reset" $ auth h $ do
     liftIO $ atomically $ modifyTVar' (hState h) reset
 
-  Scotty.post "/end" $ do
+  Scotty.post "/end" $ auth h $ do
     liftIO $ atomically $ modifyTVar' (hState h) end
 
   Scotty.get "/assets/style.css" $ do
     Scotty.setHeader "Content-Type" "text/css"
     Scotty.file "assets/style.css"
+
+auth :: Handle -> ActionM () -> ActionM ()
+auth h action = do
+  mPid <- Scotty.getCookie "id"
+  case fromText =<< mPid of
+    Nothing -> Scotty.status unauthorized401
+    Just pid -> do
+      state <- liftIO $ readTVarIO (hState h)
+      if (sHost state == pid)
+        then action
+        else Scotty.status unauthorized401
 
 playerJoin :: Handle -> Player -> ActionM ()
 playerJoin h p = do
