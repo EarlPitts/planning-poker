@@ -16,6 +16,7 @@ library
     Main
     Core
     Web
+    Web.View
 
   build-depends:
     , aeson
