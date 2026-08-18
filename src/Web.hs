@@ -145,9 +145,12 @@ auth h action = do
     Nothing -> Scotty.status unauthorized401
     Just pid -> do
       state <- liftIO $ readTVarIO (hState h)
-      if (sHost state == pid)
-        then action
-        else Scotty.status unauthorized401
+      case state of
+        Stopped -> Scotty.status unauthorized401
+        InProgress{..} ->
+          if (sHost == pid)
+            then action
+            else Scotty.status unauthorized401
 
 playerJoin :: Handle -> Player -> ActionM ()
 playerJoin h p = do
