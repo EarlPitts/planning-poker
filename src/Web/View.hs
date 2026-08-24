@@ -40,13 +40,13 @@ mainView s = template "Planning Poker" $ do
         h2_ "Planning Poker"
         traverse_ (viewPlayer sIsRevealed) sPlayers
         form_ [hxPost_ "/newPlayer", hxTarget_ "#parent-div"] $ do
-          input_ [name_ "name", type_ "text", placeholder_ "Enter name..."]
+          input_ [name_ "name", type_ "text", placeholder_ "Enter your name..."]
           button_ "Join"
     Stopped ->
       div_ [id_ "parent-div"] $ do
         h2_ "Planning Poker"
         form_ [hxPost_ "/host", hxTarget_ "#parent-div"] $ do
-          input_ [name_ "name", type_ "text", placeholder_ "Enter name..."]
+          input_ [name_ "name", type_ "text", placeholder_ "Enter your name..."]
           button_ "Start new session as Host"
 
 playerView :: UUID -> State -> Html ()
