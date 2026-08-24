@@ -80,8 +80,8 @@ app h = do
           p <- findPlayer pid state
           pure $
             if (sHost state == pId p)
-              then hostView pid state
-              else playerView pid state
+              then template "Planning Poker" $ hostView pid state
+              else template "Planning Poker" $ playerView pid state
     Scotty.html $ renderText $ fromMaybe (mainView state) view
 
   Scotty.get "/player/:id" $ do
