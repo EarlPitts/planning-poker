@@ -79,17 +79,17 @@ hostView id state = do
   playerView id state
   button_
     [ hxPost_ "/reveal"
-    , hxSwap_ "none"
+    , hxTarget_ "#parent-div"
     ]
     "Reveal"
   button_
     [ hxPost_ "/reset"
-    , hxSwap_ "none"
+    , hxTarget_ "#parent-div"
     ]
     "Reset Votes"
   button_
     [ hxPost_ "/end"
-    , hxSwap_ "none"
+    , hxTarget_ "#parent-div"
     ]
     "End"
 

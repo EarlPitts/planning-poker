@@ -126,13 +126,22 @@ app h = do
                   else playerView pId state
 
   Scotty.post "/reveal" $ auth h $ do
-    liftIO $ atomically $ modifyTVar' (hState h) reveal
+    state <- liftIO $ atomically $ do
+      modifyTVar' (hState h) reveal
+      readTVar (hState h)
+    Scotty.html $ renderText $ hostView (sHost state) state
 
   Scotty.post "/reset" $ auth h $ do
-    liftIO $ atomically $ modifyTVar' (hState h) reset
+    state <- liftIO $ atomically $ do
+      modifyTVar' (hState h) reset
+      readTVar (hState h)
+    Scotty.html $ renderText $ hostView (sHost state) state
 
   Scotty.post "/end" $ auth h $ do
-    liftIO $ atomically $ modifyTVar' (hState h) end
+    state <- liftIO $ atomically $ do
+      modifyTVar' (hState h) end
+      readTVar (hState h)
+    Scotty.html $ renderText $ hostView (sHost state) state
 
   Scotty.get "/assets/style.css" $ do
     Scotty.setHeader "Content-Type" "text/css"
