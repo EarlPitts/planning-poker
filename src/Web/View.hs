@@ -51,7 +51,7 @@ mainView s = template "Planning Poker" $ do
 
 playerView :: UUID -> State -> Html ()
 playerView _ Stopped = p_ "Session ended"
-playerView id InProgress{..} = div_
+playerView id InProgress{..} = template "Planning Poker" $ div_
   [ id_ "parent-div"
   , hxGet_ $ "/player/" <> (toText id)
   , hxTrigger_ "every 2s"
