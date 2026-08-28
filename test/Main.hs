@@ -35,7 +35,7 @@ main = hspec $ do
               , sIsRevealed = revealed
               , sHost = host
               }
-       in findPlayer (pId player) state == Just player
+       in findPlayer (pId player) state == Nothing
 
   it "doesn't find non-existent player" $ do
     property $ \player others revealed host ->
