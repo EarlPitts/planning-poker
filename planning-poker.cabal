@@ -2,19 +2,25 @@ cabal-version: 3.4
 name:          planning-poker
 version:       0.1.0.0
 
+common warnings
+  ghc-options:
+    -Wall -Wcompat -Wincomplete-record-updates
+    -Wincomplete-uni-patterns -Wredundant-constraints
+    -Wmissing-export-lists -Wpartial-fields
+
 library
+  import:             warnings
   hs-source-dirs:     src
   default-language:   Haskell2010
-  ghc-options:        -Wall
   default-extensions:
     OverloadedStrings
     RecordWildCards
 
   exposed-modules:
+    Core
     Logger
     Paths_planning_poker
     PlanningPoker
-    Core
     Web
     Web.View
 
@@ -29,7 +35,7 @@ library
     , mtl
     , multipart
     , random
-    , scotty == 0.22
+    , scotty         ==0.22
     , sqlite-simple
     , stm
     , text
@@ -46,3 +52,17 @@ executable planning-poker
   build-depends:
     , base
     , planning-poker
+
+test-suite planning-poker-test
+  import:           warnings
+  default-language: Haskell2010
+  type:             exitcode-stdio-1.0
+  hs-source-dirs:   test
+  main-is:          Main.hs
+  build-depends:
+    , base
+    , hspec
+    , planning-poker
+    , QuickCheck
+    , quickcheck-instances
+    , text
