@@ -24,16 +24,12 @@
         );
 
         devShells.default = pkgs.mkShell {
-          packages = with pkgs; [
-            # Haskell
-            haskell.ghc
-            haskell.cabal-install
-            haskell.haskell-language-server
-            haskell.hlint
-            haskell.cabal-fmt
-
-            # Misc
-            sqlite
+          packages = with haskell; [
+            ghc
+            cabal-install
+            haskell-language-server
+            hlint
+            cabal-fmt
           ];
 
           buildInputs = [
