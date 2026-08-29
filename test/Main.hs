@@ -1,10 +1,19 @@
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE QuasiQuotes #-}
+
 module Main (main) where
 
 import Core
 import qualified Data.Text as T
+import GHC.Conc (newTVarIO)
+import qualified Logger
+import Network.Wai (Application)
 import Test.Hspec
+import Test.Hspec.Wai
 import Test.QuickCheck
 import Test.QuickCheck.Instances.UUID ()
+import Web (Handle (..), app, withHandle)
+import qualified Web.Scotty as Scotty
 
 instance Arbitrary Vote where
   arbitrary = arbitraryBoundedEnum
@@ -19,6 +28,11 @@ instance Arbitrary Player where
 
 main :: IO ()
 main = hspec $ do
+  testsCore
+  testsRoute
+
+testsCore :: Spec
+testsCore = do
   it "cannot join stopped game" $ do
     property $ \player ->
       join player Stopped == Stopped
@@ -66,3 +80,17 @@ main = hspec $ do
 
       let finalVote = pVote <$> findPlayer (pId player) resultState
       finalVote === Just (Just v)
+
+mkApp :: State -> IO Application
+mkApp state = do
+  s <- newTVarIO state
+  let config = undefined
+  Logger.withHandle (Logger.Config (Just Logger.Error)) $ \logger ->
+    Web.withHandle config logger s (Scotty.scottyApp . app)
+
+testsRoute :: Spec
+testsRoute = do
+  describe "GET /" $ do
+    with (mkApp Stopped) $
+      it "response with 200 when no game is in progress" $ do
+        get "/" `shouldRespondWith` 200

@@ -41,6 +41,7 @@ library
     , text
     , time
     , uuid
+    , wai
     , wai-extra
     , yaml
 
@@ -62,7 +63,10 @@ test-suite planning-poker-test
   build-depends:
     , base
     , hspec
+    , hspec-wai
     , planning-poker
     , QuickCheck
     , quickcheck-instances
+    , scotty
     , text
+    , wai

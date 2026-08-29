@@ -8,6 +8,7 @@ module Web (
   Config (..),
   withHandle,
   run,
+  app,
 ) where
 
 import Control.Applicative (empty, (<|>))

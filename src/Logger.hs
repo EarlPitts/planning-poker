@@ -4,6 +4,7 @@
 module Logger (
   Handle (..),
   Config (..),
+  Verbosity (..),
   withHandle,
   logDebug,
   logInfo,
