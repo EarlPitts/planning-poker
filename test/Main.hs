@@ -4,7 +4,9 @@
 module Main (main) where
 
 import Core
+import Data.Maybe (fromJust)
 import qualified Data.Text as T
+import Data.UUID (fromString, toASCIIBytes)
 import GHC.Conc (newTVarIO)
 import qualified Logger
 import Network.Wai (Application)
@@ -12,7 +14,7 @@ import Test.Hspec
 import Test.Hspec.Wai
 import Test.QuickCheck
 import Test.QuickCheck.Instances.UUID ()
-import Web (Handle (..), app, withHandle)
+import Web (Config (..), app, withHandle)
 import qualified Web.Scotty as Scotty
 
 instance Arbitrary Vote where
@@ -84,13 +86,34 @@ testsCore = do
 mkApp :: State -> IO Application
 mkApp state = do
   s <- newTVarIO state
-  let config = undefined
+  let config = Web.Config Nothing Nothing
   Logger.withHandle (Logger.Config (Just Logger.Error)) $ \logger ->
     Web.withHandle config logger s (Scotty.scottyApp . app)
 
 testsRoute :: Spec
 testsRoute = do
   describe "GET /" $ do
-    with (mkApp Stopped) $
+    with (mkApp Stopped) $ do
       it "response with 200 when no game is in progress" $ do
         get "/" `shouldRespondWith` 200
+
+  describe "GET /player/:id" $ do
+    with (mkApp Stopped) $ do
+      it "response with 400 when id is not valid UUID" $ do
+        get "/player/not-uuid" `shouldRespondWith` 400
+
+      it "response with 404 when player with given id is not found" $ do
+        get "/player/902d870d-11b3-46cd-8296-6a9cf1a376c2"
+          `shouldRespondWith` 404
+
+    let uuid = fromJust (fromString "902d870d-11b3-46cd-8296-6a9cf1a376c2")
+        runningState =
+          InProgress
+            { sPlayers = [Player Nothing "Jon Doe" uuid False]
+            , sIsRevealed = False
+            , sHost = uuid
+            }
+    with (mkApp runningState) $ do
+      it "response with 200 when player exists" $ do
+        get ("/player/" <> toASCIIBytes uuid)
+          `shouldRespondWith` 200

@@ -69,4 +69,5 @@ test-suite planning-poker-test
     , quickcheck-instances
     , scotty
     , text
+    , uuid
     , wai
