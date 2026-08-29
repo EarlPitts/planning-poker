@@ -21,7 +21,7 @@ import Data.UUID
 import Data.UUID.V4
 import qualified Logger
 import Lucid
-import Network.HTTP.Types.Status (badRequest400, unauthorized401)
+import Network.HTTP.Types.Status (badRequest400, notFound404, unauthorized401)
 import Web.Scotty (ActionM, ScottyM)
 import qualified Web.Scotty as Scotty
 import qualified Web.Scotty.Cookie as Scotty
@@ -91,7 +91,9 @@ app h = do
       Nothing -> Scotty.status badRequest400
       Just pId -> do
         state <- liftIO $ readTVarIO (hState h)
-        Scotty.html $ renderText (playerView pId state)
+        if (playerExists pId state)
+          then Scotty.html $ renderText (playerView pId state)
+          else Scotty.status notFound404
 
   Scotty.post "/host" $ do
     pName <- Scotty.formParam "name"
