@@ -7,6 +7,7 @@ import qualified Data.Text as T
 import Data.UUID
 import Lucid
 import Lucid.Base (makeAttributes)
+import Web.Style (renderedCss)
 
 import Core
 
@@ -22,6 +23,7 @@ template title body = doctypehtml_ $ do
   head_ $ do
     title_ $ toHtml title
     link_ [rel_ "stylesheet", type_ "text/css", href_ "/assets/style.css"]
+    -- style_ [type_ "text/css"] (toHtmlRaw renderedCss)
     script_
       [ src_ "https://cdn.jsdelivr.net/npm/htmx.org@2.0.10/dist/htmx.min.js"
       , integrity_ "sha384-H5SrcfygHmAuTDZphMHqBJLc3FhssKjG7w/CeCpFReSfwBWDTKpkzPP8c+cLsK+V"
@@ -98,9 +100,10 @@ viewPlayer revealed Player{..} = div_ $ do
   span_ $ toHtml pName
   ": "
   span_ $
-    if revealed
-      then viewVote pVote
-      else "🂡"
+    case (revealed, pVote) of
+      (True, _) -> viewVote pVote
+      (False, Nothing) -> "🂠"
+      (False, _) -> "🂡"
 
 viewVote :: Maybe Vote -> Html ()
 viewVote Nothing = "🂠"
