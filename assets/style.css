@@ -217,3 +217,20 @@ textarea {
 .subject {
   color: #e2d6a6;
 }
+
+.player-list {
+  display: flex;
+  flex-direction: column;
+  width: 20rem;
+  max-width: 100%;
+}
+
+.player {
+  display: flex;
+  align-items: baseline;
+  width: 100%;
+}
+
+.player .vote {
+  margin-left: auto;
+}

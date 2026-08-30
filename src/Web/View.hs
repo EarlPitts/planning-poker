@@ -61,8 +61,9 @@ playerView id InProgress{..} = div_
   $ do
     h2_ "Planning Poker"
     let (p, rest) = partition (\p -> pId p == id) sPlayers
-    traverse_ (viewPlayer True) p
-    traverse_ (viewPlayer sIsRevealed) rest
+    div_ [class_ "player-list"] $ do
+      traverse_ (viewPlayer True) p
+      traverse_ (viewPlayer sIsRevealed) rest
     voteButtons id
 
 voteButtons :: UUID -> Html ()
@@ -96,10 +97,10 @@ hostView id state = do
     "End"
 
 viewPlayer :: Bool -> Player -> Html ()
-viewPlayer revealed Player{..} = div_ $ do
+viewPlayer revealed Player{..} = div_ [class_ "player"] $ do
   span_ $ toHtml pName
-  ": "
-  span_ $
+  ":"
+  span_ [class_ "vote"] $
     case (revealed, pVote) of
       (True, _) -> viewVote pVote
       (False, Nothing) -> "🂠"
