@@ -55,6 +55,7 @@ playerView id InProgress{..} = div_
   [ id_ "player-view"
   , hxGet_ $ "/player/" <> (toText id)
   , hxTrigger_ "every 2s"
+  , hxSwap_ "outerHTML"
   ]
   $ do
     h2_ "Planning Poker"
