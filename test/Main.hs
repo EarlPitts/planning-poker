@@ -92,28 +92,30 @@ mkApp state = do
 
 testsRoute :: Spec
 testsRoute = do
+  let existingUUID = fromJust (fromString "902d870d-11b3-46cd-8296-6a9cf1a376c2")
+      nonExistingUUID = fromJust (fromString "902d870d-11b3-46cd-8296-6a9cf1a376c3")
+      runningState =
+        InProgress
+          { sPlayers = [Player Nothing "Jon Doe" existingUUID False]
+          , sIsRevealed = False
+          , sHost = existingUUID
+          }
+
   describe "GET /" $ do
     with (mkApp Stopped) $ do
       it "response with 200 when no game is in progress" $ do
         get "/" `shouldRespondWith` 200
 
   describe "GET /player/:id" $ do
-    with (mkApp Stopped) $ do
+    with (mkApp runningState) $ do
       it "response with 400 when id is not valid UUID" $ do
         get "/player/not-uuid" `shouldRespondWith` 400
 
       it "response with 404 when player with given id is not found" $ do
-        get "/player/902d870d-11b3-46cd-8296-6a9cf1a376c2"
+        get ("/player/" <> toASCIIBytes nonExistingUUID)
           `shouldRespondWith` 404
 
-    let uuid = fromJust (fromString "902d870d-11b3-46cd-8296-6a9cf1a376c2")
-        runningState =
-          InProgress
-            { sPlayers = [Player Nothing "Jon Doe" uuid False]
-            , sIsRevealed = False
-            , sHost = uuid
-            }
     with (mkApp runningState) $ do
       it "response with 200 when player exists" $ do
-        get ("/player/" <> toASCIIBytes uuid)
+        get ("/player/" <> toASCIIBytes existingUUID)
           `shouldRespondWith` 200
