@@ -91,7 +91,7 @@ app h = do
       Nothing -> Scotty.status badRequest400
       Just pId -> do
         state <- liftIO $ readTVarIO (hState h)
-        if (playerExists pId state)
+        if (playerExists pId state || gameEnded state)
           then Scotty.html $ renderText (playerView pId state)
           else Scotty.status notFound404
 

@@ -74,6 +74,9 @@ findPlayer id InProgress{..} = find (\p -> pId p == id) sPlayers
 playerExists :: UUID -> State -> Bool
 playerExists uuid state = maybe False (const True) $ findPlayer uuid state
 
+gameEnded :: State -> Bool
+gameEnded state = state == Stopped
+
 modifyPlayerVote :: UUID -> Vote -> State -> State
 modifyPlayerVote _ _ Stopped = Stopped
 modifyPlayerVote id v s@InProgress{..} =
