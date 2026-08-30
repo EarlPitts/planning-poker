@@ -36,23 +36,23 @@ mainView :: State -> Html ()
 mainView s = template "Planning Poker" $ do
   case s of
     InProgress{..} ->
-      div_ [id_ "parent-div"] $ do
+      div_ [id_ "main-view"] $ do
         h2_ "Planning Poker"
         traverse_ (viewPlayer sIsRevealed) sPlayers
-        form_ [hxPost_ "/newPlayer", hxTarget_ "#parent-div"] $ do
+        form_ [hxPost_ "/newPlayer", hxTarget_ "#main-view", hxSwap_ "outerHTML"] $ do
           input_ [name_ "name", type_ "text", placeholder_ "Enter your name..."]
           button_ "Join"
     Stopped ->
-      div_ [id_ "parent-div"] $ do
+      div_ [id_ "main-view"] $ do
         h2_ "Planning Poker"
-        form_ [hxPost_ "/host", hxTarget_ "#parent-div"] $ do
+        form_ [hxPost_ "/host", hxTarget_ "#main-view", hxSwap_ "outerHTML"] $ do
           input_ [name_ "name", type_ "text", placeholder_ "Enter your name..."]
           button_ "Start new session as Host"
 
 playerView :: UUID -> State -> Html ()
 playerView _ Stopped = p_ "Session ended"
 playerView id InProgress{..} = div_
-  [ id_ "parent-div"
+  [ id_ "player-view"
   , hxGet_ $ "/player/" <> (toText id)
   , hxTrigger_ "every 2s"
   ]
@@ -71,26 +71,30 @@ voteButtons pId = traverse_ (btn . T.pack . show) ([minBound .. maxBound] :: [Vo
   btn num =
     button_
       [ hxPost_ $ "/vote/" <> (toText pId) <> "/" <> num
-      , hxTarget_ "#parent-div"
+      , hxTarget_ "#player-view"
+      , hxSwap_ "outerHTML"
       ]
       (toHtml num)
 
 hostView :: UUID -> State -> Html ()
-hostView id state = do
+hostView id state = div_ [id_ "host-view"] $ do
   playerView id state
   button_
     [ hxPost_ "/reveal"
-    , hxTarget_ "#parent-div"
+    , hxTarget_ "#host-view"
+    , hxSwap_ "outerHTML"
     ]
     "Reveal"
   button_
     [ hxPost_ "/reset"
-    , hxTarget_ "#parent-div"
+    , hxTarget_ "#host-view"
+    , hxSwap_ "outerHTML"
     ]
     "Reset Votes"
   button_
     [ hxPost_ "/end"
-    , hxTarget_ "#parent-div"
+    , hxTarget_ "#host-view"
+    , hxSwap_ "outerHTML"
     ]
     "End"
 

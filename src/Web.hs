@@ -122,11 +122,7 @@ app h = do
             state <- liftIO $ atomically $ do
               modifyTVar' (hState h) (modifyPlayerVote pId pVote)
               readTVar (hState h)
-            Scotty.html $
-              renderText $
-                if (sHost state == pId)
-                  then hostView pId state
-                  else playerView pId state
+            Scotty.html $ renderText $ playerView pId state
 
   Scotty.post "/reveal" $ auth h $ do
     state <- liftIO $ atomically $ do
