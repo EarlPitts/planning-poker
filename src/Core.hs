@@ -1,9 +1,11 @@
 module Core where
 
+import Control.Concurrent.Chan
 import Data.List (find)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.UUID
+import Network.Wai.EventSource (ServerEvent)
 
 data Vote
   = Instant
@@ -33,8 +35,12 @@ data Player = Player
   , pName :: T.Text
   , pId :: UUID
   , pIsHost :: Bool
+  , pChan :: Chan ServerEvent
   }
-  deriving (Eq, Show)
+  deriving (Eq)
+
+instance Show Player where
+  show Player{..} = "Player: " <> T.unpack pName
 
 data State
   = Stopped
@@ -43,7 +49,7 @@ data State
       , sIsRevealed :: Bool
       , sHost :: UUID
       }
-  deriving (Eq, Show)
+  deriving (Eq)
 
 mkVote :: String -> Maybe Vote
 mkVote "0.1" = Just Instant
@@ -64,7 +70,7 @@ join :: Player -> State -> State
 join _ Stopped = Stopped
 join p s = s{sPlayers = p : sPlayers s}
 
-newPlayer :: Text -> UUID -> Bool -> Player
+newPlayer :: Text -> UUID -> Bool -> Chan ServerEvent -> Player
 newPlayer = Player Nothing
 
 findPlayer :: UUID -> State -> Maybe Player

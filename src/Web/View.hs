@@ -10,12 +10,15 @@ import Lucid.Base (makeAttributes)
 
 import Core
 
-hxPost_, hxGet_, hxTarget_, hxTrigger_, hxSwap_ :: Text -> Attributes
+hxPost_, hxGet_, hxTarget_, hxTrigger_, hxSwap_, hxExt_, sseConnect_, sseSwap_ :: Text -> Attributes
 hxPost_ = makeAttributes "hx-post"
 hxGet_ = makeAttributes "hx-get"
 hxTarget_ = makeAttributes "hx-target"
 hxTrigger_ = makeAttributes "hx-trigger"
 hxSwap_ = makeAttributes "hx-swap"
+hxExt_ = makeAttributes "hx-ext"
+sseConnect_ = makeAttributes "sse-connect"
+sseSwap_ = makeAttributes "sse-swap"
 
 template :: T.Text -> Html () -> Html ()
 template title body = doctypehtml_ $ do
@@ -24,11 +27,15 @@ template title body = doctypehtml_ $ do
     link_ [rel_ "stylesheet", type_ "text/css", href_ "/assets/style.css"]
     script_
       [ src_ "https://cdn.jsdelivr.net/npm/htmx.org@2.0.10/dist/htmx.min.js"
-      , integrity_ "sha384-H5SrcfygHmAuTDZphMHqBJLc3FhssKjG7w/CeCpFReSfwBWDTKpkzPP8c+cLsK+V"
       , crossorigin_ "anonymous"
       ]
       ("" :: Text)
-  body_ $ do
+    script_
+      [ src_ "https://cdn.jsdelivr.net/npm/htmx-ext-sse@2.2.4/dist/sse.min.js"
+      , crossorigin_ "anonymous"
+      ]
+      ("" :: Text)
+  body_ [hxExt_ "sse"] $ do
     -- header_ $ a_ [href_ "/"] "imageboard"
     body
 
@@ -53,8 +60,8 @@ playerView :: UUID -> State -> Html ()
 playerView _ Stopped = p_ "Session ended"
 playerView id InProgress{..} = div_
   [ id_ "player-view"
-  , hxGet_ $ "/player/" <> (toText id)
-  , hxTrigger_ "every 2s"
+  , sseConnect_ $ "/player/" <> toText id
+  , sseSwap_ "message"
   , hxSwap_ "outerHTML"
   ]
   $ do

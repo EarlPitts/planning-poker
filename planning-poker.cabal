@@ -27,6 +27,7 @@ library
   build-depends:
     , aeson
     , base
+    , binary
     , bytestring
     , directory
     , http-types
@@ -71,3 +72,4 @@ test-suite planning-poker-test
     , text
     , uuid
     , wai
+    , wai-extra

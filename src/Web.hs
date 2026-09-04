@@ -15,6 +15,7 @@ import Control.Applicative (empty, (<|>))
 import Control.Concurrent.STM
 import Control.Monad.Trans (liftIO)
 import qualified Data.Aeson as A
+import qualified Data.Binary.Builder as B
 import Data.Maybe (fromMaybe)
 import qualified Data.Text as T
 import Data.UUID
@@ -26,7 +27,10 @@ import Web.Scotty (ActionM, ScottyM)
 import qualified Web.Scotty as Scotty
 import qualified Web.Scotty.Cookie as Scotty
 
+import Control.Concurrent
 import Core
+import Data.Foldable
+import Network.Wai.EventSource (ServerEvent (..), eventSourceAppChan)
 import Web.View
 
 data Config = Config
@@ -91,14 +95,16 @@ app h = do
       Nothing -> Scotty.status badRequest400
       Just pId -> do
         state <- liftIO $ readTVarIO (hState h)
-        if (playerExists pId state || gameEnded state)
-          then Scotty.html $ renderText (playerView pId state)
-          else Scotty.status notFound404
+        case findPlayer pId state of
+          Just p -> do
+            Scotty.nested (eventSourceAppChan (pChan p))
+          Nothing -> Scotty.status notFound404
 
   Scotty.post "/host" $ do
     pName <- Scotty.formParam "name"
     pId <- liftIO nextRandom
-    let p = newPlayer pName pId False
+    chan <- liftIO newChan
+    let p = newPlayer pName pId False chan
     state <- liftIO $ readTVarIO (hState h)
     case state of
       Stopped -> hostJoin h p
@@ -107,7 +113,8 @@ app h = do
   Scotty.post "/newPlayer" $ do
     pName <- Scotty.formParam "name"
     pId <- liftIO nextRandom
-    let p = newPlayer pName pId False
+    chan <- liftIO newChan
+    let p = newPlayer pName pId False chan
     playerJoin h p
 
   Scotty.post "/vote/:id/:vote" $ do
@@ -122,24 +129,28 @@ app h = do
             state <- liftIO $ atomically $ do
               modifyTVar' (hState h) (modifyPlayerVote pId pVote)
               readTVar (hState h)
+            liftIO $ sendUpdate state
             Scotty.html $ renderText $ playerView pId state
 
   Scotty.post "/reveal" $ auth h $ do
     state <- liftIO $ atomically $ do
       modifyTVar' (hState h) reveal
       readTVar (hState h)
+    liftIO $ sendUpdate state
     Scotty.html $ renderText $ hostView (sHost state) state
 
   Scotty.post "/reset" $ auth h $ do
     state <- liftIO $ atomically $ do
       modifyTVar' (hState h) reset
       readTVar (hState h)
+    liftIO $ sendUpdate state
     Scotty.html $ renderText $ hostView (sHost state) state
 
   Scotty.post "/end" $ auth h $ do
     state <- liftIO $ atomically $ do
       modifyTVar' (hState h) end
       readTVar (hState h)
+    liftIO $ sendUpdate state
     Scotty.html $ renderText $ hostView (sHost state) state
 
   Scotty.get "/assets/style.css" $ do
@@ -165,6 +176,7 @@ playerJoin h p = do
   state <- liftIO $ atomically $ do
     modifyTVar' (hState h) (join p)
     readTVar (hState h)
+  liftIO $ sendUpdate state
   liftIO $ Logger.logInfo (hLogger h) ("Player " <> (T.unpack $ pName p) <> " joined")
   Scotty.setSimpleCookie "id" (toText $ pId p)
   Scotty.html $ renderText (playerView (pId p) state)
@@ -176,3 +188,21 @@ hostJoin h p = do
   liftIO $ Logger.logInfo (hLogger h) ("Session started by " <> (T.unpack $ pName p))
   Scotty.setSimpleCookie "id" (toText $ pId p)
   Scotty.html $ renderText (hostView (pId p) state)
+
+sendUpdate :: State -> IO ()
+sendUpdate Stopped = pure ()
+sendUpdate state@InProgress{..} =
+  traverse_ f sPlayers
+ where
+  f p =
+    if pIsHost p
+      then
+        let channel = pChan p
+            d = [B.fromLazyByteString $ renderBS (hostView (pId p) state)]
+            event = ServerEvent Nothing Nothing d
+         in liftIO $ writeChan channel event
+      else
+        let channel = pChan p
+            d = [B.fromLazyByteString $ renderBS (playerView (pId p) state)]
+            event = ServerEvent Nothing Nothing d
+         in liftIO $ writeChan channel event
