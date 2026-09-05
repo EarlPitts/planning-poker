@@ -21,7 +21,7 @@ import qualified Data.Text as T
 import Data.UUID
 import Data.UUID.V4
 import qualified Logger
-import Lucid
+import Lucid hiding (for_)
 import Network.HTTP.Types.Status (badRequest400, notFound404, unauthorized401)
 import Web.Scotty (ActionM, ScottyM)
 import qualified Web.Scotty as Scotty
@@ -83,10 +83,11 @@ app h = do
     let view = do
           pid <- fromText =<< existingId
           p <- findPlayer pid state
-          pure $
-            if (sHost state == pId p)
-              then template "Planning Poker" $ hostView pid state
-              else template "Planning Poker" $ playerView pid state
+          let view' =
+                if (sHost state == pId p)
+                  then hostView
+                  else playerView
+          pure $ template "Planning Poker" $ view' pid state
     Scotty.html $ renderText $ fromMaybe (mainView state) view
 
   Scotty.get "/player/:id" $ do
@@ -96,8 +97,7 @@ app h = do
       Just pId -> do
         state <- liftIO $ readTVarIO (hState h)
         case findPlayer pId state of
-          Just p -> do
-            Scotty.nested (eventSourceAppChan (pChan p))
+          Just p -> Scotty.nested (eventSourceAppChan (pChan p))
           Nothing -> Scotty.status notFound404
 
   Scotty.post "/host" $ do
@@ -190,19 +190,12 @@ hostJoin h p = do
   Scotty.html $ renderText (hostView (pId p) state)
 
 sendUpdate :: State -> IO ()
-sendUpdate Stopped = pure ()
-sendUpdate state@InProgress{..} =
-  traverse_ f sPlayers
- where
-  f p =
-    if pIsHost p
-      then
-        let channel = pChan p
-            d = [B.fromLazyByteString $ renderBS (hostView (pId p) state)]
-            event = ServerEvent Nothing Nothing d
-         in liftIO $ writeChan channel event
-      else
-        let channel = pChan p
-            d = [B.fromLazyByteString $ renderBS (playerView (pId p) state)]
-            event = ServerEvent Nothing Nothing d
-         in liftIO $ writeChan channel event
+sendUpdate = \case
+  Stopped -> pure ()
+  state@InProgress{..} ->
+    for_ sPlayers $ \p ->
+      let channel = pChan p
+          view = if pIsHost p then hostView else playerView
+          d = [B.fromLazyByteString $ renderBS (view (pId p) state)]
+          event = ServerEvent Nothing Nothing d
+       in writeChan channel event
