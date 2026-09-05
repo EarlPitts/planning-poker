@@ -25,7 +25,7 @@ instance Arbitrary Vote where
   arbitrary = arbitraryBoundedEnum
 
 instance Arbitrary (Chan ServerEvent) where
-  arbitrary = pure emptyChannel
+  arbitrary = pure dummyChannel
 
 instance Arbitrary Player where
   arbitrary =
@@ -36,8 +36,8 @@ instance Arbitrary Player where
       <*> arbitrary
       <*> arbitrary
 
-emptyChannel :: Chan ServerEvent
-emptyChannel = unsafePerformIO newChan
+dummyChannel :: Chan ServerEvent
+dummyChannel = unsafePerformIO newChan
 
 main :: IO ()
 main = hspec $ do
@@ -108,7 +108,7 @@ testsRoute = do
       nonExistingUUID = fromJust (fromString "902d870d-11b3-46cd-8296-6a9cf1a376c3")
       runningState =
         InProgress
-          { sPlayers = [Player Nothing "Jon Doe" existingUUID False emptyChannel]
+          { sPlayers = [Player Nothing "Jon Doe" existingUUID False dummyChannel]
           , sIsRevealed = False
           , sHost = existingUUID
           }
@@ -126,8 +126,3 @@ testsRoute = do
       it "response with 404 when player with given id is not found" $ do
         get ("/player/" <> toASCIIBytes nonExistingUUID)
           `shouldRespondWith` 404
-
-    -- with (mkApp runningState) $ do
-    --   it "response with 200 when player exists" $ do
-    --     get ("/player/" <> toASCIIBytes existingUUID)
-    --       `shouldRespondWith` 200

@@ -129,29 +129,28 @@ app h = do
             state <- liftIO $ atomically $ do
               modifyTVar' (hState h) (modifyPlayerVote pId pVote)
               readTVar (hState h)
-            liftIO $ sendUpdate state
+            liftIO $ sendUpdate (sPlayers state) state
             Scotty.html $ renderText $ playerView pId state
 
   Scotty.post "/reveal" $ auth h $ do
     state <- liftIO $ atomically $ do
       modifyTVar' (hState h) reveal
       readTVar (hState h)
-    liftIO $ sendUpdate state
+    liftIO $ sendUpdate (sPlayers state) state
     Scotty.html $ renderText $ hostView (sHost state) state
 
   Scotty.post "/reset" $ auth h $ do
     state <- liftIO $ atomically $ do
       modifyTVar' (hState h) reset
       readTVar (hState h)
-    liftIO $ sendUpdate state
+    liftIO $ sendUpdate (sPlayers state) state
     Scotty.html $ renderText $ hostView (sHost state) state
 
   Scotty.post "/end" $ auth h $ do
-    state <- liftIO $ atomically $ do
-      modifyTVar' (hState h) end
-      readTVar (hState h)
-    liftIO $ sendUpdate state
-    Scotty.html $ renderText $ hostView (sHost state) state
+    state <- liftIO $ readTVarIO (hState h)
+    liftIO $ sendUpdate (sPlayers state) Stopped
+    liftIO $ atomically $ modifyTVar' (hState h) end
+    Scotty.html $ renderText $ hostView (sHost state) Stopped
 
   Scotty.get "/assets/style.css" $ do
     Scotty.setHeader "Content-Type" "text/css"
@@ -176,7 +175,7 @@ playerJoin h p = do
   state <- liftIO $ atomically $ do
     modifyTVar' (hState h) (join p)
     readTVar (hState h)
-  liftIO $ sendUpdate state
+  liftIO $ sendUpdate (sPlayers state) state
   liftIO $ Logger.logInfo (hLogger h) ("Player " <> (T.unpack $ pName p) <> " joined")
   Scotty.setSimpleCookie "id" (toText $ pId p)
   Scotty.html $ renderText (playerView (pId p) state)
@@ -189,13 +188,11 @@ hostJoin h p = do
   Scotty.setSimpleCookie "id" (toText $ pId p)
   Scotty.html $ renderText (hostView (pId p) state)
 
-sendUpdate :: State -> IO ()
-sendUpdate = \case
-  Stopped -> pure ()
-  state@InProgress{..} ->
-    for_ sPlayers $ \p ->
-      let channel = pChan p
-          view = if pIsHost p then hostView else playerView
-          d = [B.fromLazyByteString $ renderBS (view (pId p) state)]
-          event = ServerEvent Nothing Nothing d
-       in writeChan channel event
+sendUpdate :: [Player] -> State -> IO ()
+sendUpdate players state =
+  for_ players $ \p ->
+    let channel = pChan p
+        view = if pIsHost p then hostView else playerView
+        d = [B.fromLazyByteString $ renderBS (view (pId p) state)]
+        event = ServerEvent Nothing Nothing d
+     in writeChan channel event
