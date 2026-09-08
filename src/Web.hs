@@ -1,6 +1,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
 
 module Web (
@@ -12,10 +13,14 @@ module Web (
 ) where
 
 import Control.Applicative (empty, (<|>))
+import Control.Concurrent
 import Control.Concurrent.STM
 import Control.Monad.Trans (liftIO)
 import qualified Data.Aeson as A
 import qualified Data.Binary.Builder as B
+import qualified Data.ByteString.Lazy as BL
+import Data.FileEmbed
+import Data.Foldable
 import Data.Maybe (fromMaybe)
 import qualified Data.Text as T
 import Data.UUID
@@ -23,14 +28,12 @@ import Data.UUID.V4
 import qualified Logger
 import Lucid hiding (for_)
 import Network.HTTP.Types.Status (badRequest400, notFound404, unauthorized401)
+import Network.Wai.EventSource (ServerEvent (..), eventSourceAppChan)
 import Web.Scotty (ActionM, ScottyM)
 import qualified Web.Scotty as Scotty
 import qualified Web.Scotty.Cookie as Scotty
 
-import Control.Concurrent
 import Core
-import Data.Foldable
-import Network.Wai.EventSource (ServerEvent (..), eventSourceAppChan)
 import Web.View
 
 data Config = Config
@@ -154,7 +157,7 @@ app h = do
 
   Scotty.get "/assets/style.css" $ do
     Scotty.setHeader "Content-Type" "text/css"
-    Scotty.file "assets/style.css"
+    Scotty.raw $ BL.fromStrict $(embedFile "assets/style.css")
 
 auth :: Handle -> ActionM () -> ActionM ()
 auth h action = do

@@ -30,6 +30,7 @@ library
     , binary
     , bytestring
     , directory
+    , file-embed
     , http-types
     , lens
     , lucid2
