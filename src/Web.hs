@@ -15,6 +15,7 @@ module Web (
 import Control.Applicative (empty, (<|>))
 import Control.Concurrent
 import Control.Concurrent.STM
+import Control.Monad (when)
 import Control.Monad.Trans (liftIO)
 import qualified Data.Aeson as A
 import qualified Data.Binary.Builder as B
@@ -199,3 +200,4 @@ sendUpdate players state =
         d = [B.fromLazyByteString $ renderBS (view (pId p) state)]
         event = ServerEvent Nothing Nothing d
      in writeChan channel event
+          >> when (state == Stopped) (writeChan channel CloseEvent)
