@@ -34,7 +34,6 @@ data Player = Player
   { pVote :: Maybe Vote
   , pName :: T.Text
   , pId :: UUID
-  , pIsHost :: Bool
   , pChan :: Chan ServerEvent
   }
   deriving (Eq)
@@ -70,7 +69,7 @@ join :: Player -> State -> State
 join _ Stopped = Stopped
 join p s = s{sPlayers = p : sPlayers s}
 
-newPlayer :: Text -> UUID -> Bool -> Chan ServerEvent -> Player
+newPlayer :: Text -> UUID -> Chan ServerEvent -> Player
 newPlayer = Player Nothing
 
 findPlayer :: UUID -> State -> Maybe Player

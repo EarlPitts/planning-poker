@@ -34,7 +34,6 @@ instance Arbitrary Player where
       <*> (T.pack <$> arbitrary)
       <*> arbitrary
       <*> arbitrary
-      <*> arbitrary
 
 dummyChannel :: Chan ServerEvent
 dummyChannel = unsafePerformIO newChan
@@ -108,7 +107,7 @@ testsRoute = do
       nonExistingUUID = fromJust (fromString "902d870d-11b3-46cd-8296-6a9cf1a376c3")
       runningState =
         InProgress
-          { sPlayers = [Player Nothing "Jon Doe" existingUUID False dummyChannel]
+          { sPlayers = [Player Nothing "Jon Doe" existingUUID dummyChannel]
           , sIsRevealed = False
           , sHost = existingUUID
           }

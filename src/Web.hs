@@ -108,7 +108,7 @@ app h = do
     pName <- Scotty.formParam "name"
     pId <- liftIO nextRandom
     chan <- liftIO newChan
-    let p = newPlayer pName pId False chan
+    let p = newPlayer pName pId chan
     state <- liftIO $ readTVarIO (hState h)
     case state of
       Stopped -> hostJoin h p
@@ -118,7 +118,7 @@ app h = do
     pName <- Scotty.formParam "name"
     pId <- liftIO nextRandom
     chan <- liftIO newChan
-    let p = newPlayer pName pId False chan
+    let p = newPlayer pName pId chan
     playerJoin h p
 
   Scotty.post "/vote/:id/:vote" $ do
@@ -196,8 +196,7 @@ sendUpdate :: [Player] -> State -> IO ()
 sendUpdate players state =
   for_ players $ \p ->
     let channel = pChan p
-        view = if pIsHost p then hostView else playerView
-        d = [B.fromLazyByteString $ renderBS (view (pId p) state)]
+        d = [B.fromLazyByteString $ renderBS (playerView (pId p) state)]
         event = ServerEvent Nothing Nothing d
      in writeChan channel event
           >> when (state == Stopped) (writeChan channel CloseEvent)
