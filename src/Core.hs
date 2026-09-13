@@ -1,7 +1,10 @@
+{-# LANGUAGE LambdaCase #-}
+
 module Core where
 
 import Control.Concurrent.Chan
 import Data.List (find)
+import Data.Maybe (catMaybes)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.UUID
@@ -19,16 +22,20 @@ data Vote
   | Five
   deriving (Eq, Enum, Bounded)
 
+toDouble :: Vote -> Double
+toDouble = \case
+  Instant -> 0.1
+  Quarter -> 0.25
+  Half -> 0.5
+  One -> 1
+  OneAndHalf -> 1.5
+  Two -> 2
+  Three -> 3
+  Four -> 4
+  Five -> 5
+
 instance Show Vote where
-  show Instant = "0.1"
-  show Quarter = "0.25"
-  show Half = "0.5"
-  show One = "1"
-  show OneAndHalf = "1.5"
-  show Two = "2"
-  show Three = "3"
-  show Four = "4"
-  show Five = "5"
+  show = show . toDouble
 
 data Player = Player
   { pVote :: Maybe Vote
@@ -105,3 +112,11 @@ end _ = Stopped
 
 resetVote :: Player -> Player
 resetVote p = p{pVote = Nothing}
+
+voteAverage :: State -> Double
+voteAverage Stopped = 0
+voteAverage InProgress{..} = vSum / fromIntegral pNum
+ where
+  votes = catMaybes $ fmap pVote sPlayers
+  vSum = sum $ fmap toDouble votes
+  pNum = length votes

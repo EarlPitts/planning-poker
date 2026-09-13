@@ -94,6 +94,16 @@ testsCore = do
       let finalVote = pVote <$> findPlayer (pId player) resultState
       finalVote === Just (Just v)
 
+  it "computing the average of votes works" $ do
+    let votes = [Just One, Just Two, Just Instant, Nothing, Just OneAndHalf, Nothing, Just Five]
+        uuid = fromJust (fromString "902d870d-11b3-46cd-8296-6a9cf1a376c2")
+        players = fmap (\v -> Player v "test" uuid dummyChannel) votes
+        state = InProgress players True uuid
+
+    let average = voteAverage state
+
+    average === 1.92
+
 mkApp :: State -> IO Application
 mkApp state = do
   s <- newTVarIO state
