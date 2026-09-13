@@ -160,6 +160,11 @@ app h = do
     Scotty.setHeader "Content-Type" "text/css"
     Scotty.raw $ BL.fromStrict $(embedFile "assets/style.css")
 
+  Scotty.get "/favicon.ico" $ do
+    Scotty.setHeader "Content-Type" "image/x-icon"
+    Scotty.raw $ BL.fromStrict $(embedFile "assets/favicon.ico")
+
+
 auth :: Handle -> ActionM () -> ActionM ()
 auth h action = do
   mPid <- Scotty.getCookie "id"
