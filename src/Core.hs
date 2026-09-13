@@ -1,14 +1,16 @@
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Core where
 
 import Control.Concurrent.Chan
-import Data.List (find)
+import Data.List (find, groupBy, sortOn)
 import Data.Maybe (catMaybes)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.UUID
 import Network.Wai.EventSource (ServerEvent)
+import System.Random
 
 data Vote
   = Instant
@@ -20,7 +22,7 @@ data Vote
   | Three
   | Four
   | Five
-  deriving (Eq, Enum, Bounded)
+  deriving (Eq, Enum, Ord, Bounded)
 
 toDouble :: Vote -> Double
 toDouble = \case
@@ -120,3 +122,19 @@ voteAverage InProgress{..} = vSum / fromIntegral pNum
   votes = catMaybes $ fmap pVote sPlayers
   vSum = sum $ fmap toDouble votes
   pNum = length votes
+
+fight :: State -> Maybe (Player, Player)
+fight Stopped = Nothing
+fight InProgress{..} =
+  if length groups < 2
+    then Nothing
+    else Just (pick top, pick bot)
+ where
+  pSorted = sortOn pVote sPlayers
+  groups = filter (\ps -> Nothing `notElem` fmap pVote ps) $ groupBy (\p1 p2 -> pVote p1 == pVote p2) pSorted
+  top = last groups
+  bot = head groups
+  seed = sum $ fmap toDouble $ catMaybes $ fmap pVote sPlayers
+  pick l =
+    let (i, _) = uniformR (0, length l - 1) (mkStdGen $ fromIntegral @Int $ floor seed)
+     in l !! i

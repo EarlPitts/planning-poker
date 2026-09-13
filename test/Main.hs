@@ -102,7 +102,18 @@ testsCore = do
 
     let average = voteAverage state
 
-    average === 1.92
+    average == 1.92
+
+  it "getting the top and bottom voter works" $ do
+    let votes = [Just One, Just Two, Just Instant, Nothing, Just OneAndHalf, Nothing, Just Five]
+        uuid = fromJust (fromString "902d870d-11b3-46cd-8296-6a9cf1a376c2")
+        players = fmap (\v -> Player v "test" uuid dummyChannel) votes
+        state = InProgress players True uuid
+
+    let Just (top, bot) = fight state
+
+    pVote top `shouldBe` Just Five
+    pVote bot `shouldBe` Just Instant
 
 mkApp :: State -> IO Application
 mkApp state = do
