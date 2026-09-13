@@ -98,9 +98,8 @@ testsCore = do
     let votes = [Just One, Just Two, Just Instant, Nothing, Just OneAndHalf, Nothing, Just Five]
         uuid = fromJust (fromString "902d870d-11b3-46cd-8296-6a9cf1a376c2")
         players = fmap (\v -> Player v "test" uuid dummyChannel) votes
-        state = InProgress players True uuid
 
-    let average = voteAverage state
+    let average = voteAverage players
 
     average == 1.92
 
@@ -108,9 +107,8 @@ testsCore = do
     let votes = [Just One, Just Two, Just Instant, Nothing, Just OneAndHalf, Nothing, Just Five]
         uuid = fromJust (fromString "902d870d-11b3-46cd-8296-6a9cf1a376c2")
         players = fmap (\v -> Player v "test" uuid dummyChannel) votes
-        state = InProgress players True uuid
 
-    let Just (top, bot) = fight state
+    let Just (top, bot) = fight players
 
     pVote top `shouldBe` Just Five
     pVote bot `shouldBe` Just Instant

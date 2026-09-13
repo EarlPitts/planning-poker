@@ -198,5 +198,4 @@ sendUpdate players state =
     let channel = pChan p
         d = [B.fromLazyByteString $ renderBS (playerView (pId p) state)]
         event = ServerEvent Nothing Nothing d
-     in writeChan channel event
-          >> when (state == Stopped) (writeChan channel CloseEvent)
+     in writeChan channel event >> writeChan channel CloseEvent

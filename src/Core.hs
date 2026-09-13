@@ -48,7 +48,7 @@ data Player = Player
   deriving (Eq)
 
 instance Show Player where
-  show Player{..} = "Player: " <> T.unpack pName
+  show Player{..} = T.unpack pName
 
 data State
   = Stopped
@@ -63,12 +63,12 @@ mkVote :: String -> Maybe Vote
 mkVote "0.1" = Just Instant
 mkVote "0.25" = Just Quarter
 mkVote "0.5" = Just Half
-mkVote "1" = Just One
+mkVote "1.0" = Just One
 mkVote "1.5" = Just OneAndHalf
-mkVote "2" = Just Two
-mkVote "3" = Just Three
-mkVote "4" = Just Four
-mkVote "5" = Just Five
+mkVote "2.0" = Just Two
+mkVote "3.0" = Just Three
+mkVote "4.0" = Just Four
+mkVote "5.0" = Just Five
 mkVote _ = Nothing
 
 initState :: State
@@ -115,26 +115,24 @@ end _ = Stopped
 resetVote :: Player -> Player
 resetVote p = p{pVote = Nothing}
 
-voteAverage :: State -> Double
-voteAverage Stopped = 0
-voteAverage InProgress{..} = vSum / fromIntegral pNum
+voteAverage :: [Player] -> Double
+voteAverage players = vSum / fromIntegral pNum
  where
-  votes = catMaybes $ fmap pVote sPlayers
+  votes = catMaybes $ fmap pVote players
   vSum = sum $ fmap toDouble votes
   pNum = length votes
 
-fight :: State -> Maybe (Player, Player)
-fight Stopped = Nothing
-fight InProgress{..} =
+fight :: [Player] -> Maybe (Player, Player)
+fight players =
   if length groups < 2
     then Nothing
     else Just (pick top, pick bot)
  where
-  pSorted = sortOn pVote sPlayers
+  pSorted = sortOn pVote players
   groups = filter (\ps -> Nothing `notElem` fmap pVote ps) $ groupBy (\p1 p2 -> pVote p1 == pVote p2) pSorted
   top = last groups
   bot = head groups
-  seed = sum $ fmap toDouble $ catMaybes $ fmap pVote sPlayers
+  seed = sum $ fmap toDouble $ catMaybes $ fmap pVote players
   pick l =
     let (i, _) = uniformR (0, length l - 1) (mkStdGen $ fromIntegral @Int $ floor seed)
      in l !! i

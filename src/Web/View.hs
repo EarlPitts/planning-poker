@@ -8,6 +8,7 @@ import Data.UUID
 import Lucid
 import Lucid.Base (makeAttributes)
 
+import Control.Monad (when)
 import Core
 
 hxPost_, hxGet_, hxTarget_, hxTrigger_, hxSwap_, hxExt_, sseConnect_, sseSwap_ :: Text -> Attributes
@@ -70,7 +71,16 @@ playerView id InProgress{..} = div_
     div_ [class_ "player-list"] $ do
       traverse_ (viewPlayer True) p
       traverse_ (viewPlayer sIsRevealed) rest
+    when sIsRevealed $ statView sPlayers
     voteButtons id
+
+statView :: [Player] -> Html ()
+statView ps = div_ [] $ do
+  p_ $ "Average: " <> (toHtml $ show $ voteAverage ps)
+  case fight ps of
+    Nothing -> pure ()
+    Just (top, bot) ->
+      p_ $ "Fight: " <> (toHtml $ show $ top) <> " vs " <> (toHtml $ show $ bot)
 
 voteButtons :: UUID -> Html ()
 voteButtons pId = traverse_ (btn . T.pack . show) ([minBound .. maxBound] :: [Vote])
