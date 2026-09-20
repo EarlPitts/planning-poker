@@ -43,7 +43,7 @@ template title body = doctypehtml_ $ do
 mainView :: State -> Html ()
 mainView s = template "Planning Poker" $ do
   case s of
-    InProgress{..} ->
+    InProgress Game{..} ->
       div_ [id_ "main-view"] $ do
         h2_ "Planning Poker"
         traverse_ (viewPlayer sIsRevealed) sPlayers
@@ -59,7 +59,7 @@ mainView s = template "Planning Poker" $ do
 
 playerView :: UUID -> State -> Html ()
 playerView _ Stopped = p_ "Session ended"
-playerView id InProgress{..} = div_
+playerView id (InProgress Game{..}) = div_
   [ id_ "player-view"
   , sseConnect_ $ "/player/" <> toText id
   , sseSwap_ "message"
@@ -94,9 +94,10 @@ voteButtons pId = traverse_ (btn . T.pack . show) ([minBound .. maxBound] :: [Vo
       ]
       (toHtml num)
 
-hostView :: UUID -> State -> Html ()
-hostView id state = div_ [id_ "host-view"] $ do
-  playerView id state
+hostView :: State -> Html ()
+hostView Stopped = mainView Stopped
+hostView s@(InProgress game) = div_ [id_ "host-view"] $ do
+  playerView (sHost game) s
   button_
     [ hxPost_ "/reveal"
     , hxTarget_ "#host-view"

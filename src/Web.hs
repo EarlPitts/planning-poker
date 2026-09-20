@@ -85,13 +85,16 @@ app h = do
     existingId <- Scotty.getCookie "id"
     state <- liftIO $ readTVarIO (hState h)
     let view = do
+          game <- case state of
+            Stopped -> Nothing
+            InProgress game -> Just game
           pid <- fromText =<< existingId
           p <- findPlayer pid state
           let view' =
-                if (sHost state == pId p)
+                if (sHost game == pId p)
                   then hostView
-                  else playerView
-          pure $ template "Planning Poker" $ view' pid state
+                  else playerView pid
+          pure $ template "Planning Poker" $ view' state
     Scotty.html $ renderText $ fromMaybe (mainView state) view
 
   Scotty.get "/player/:id" $ do
@@ -112,7 +115,7 @@ app h = do
     state <- liftIO $ readTVarIO (hState h)
     case state of
       Stopped -> hostJoin h p
-      InProgress _ _ _ -> playerJoin h p
+      InProgress _ -> playerJoin h p
 
   Scotty.post "/newPlayer" $ do
     pName <- Scotty.formParam "name"
@@ -133,28 +136,29 @@ app h = do
             state <- liftIO $ atomically $ do
               modifyTVar' (hState h) (modifyPlayerVote pId pVote)
               readTVar (hState h)
-            liftIO $ sendUpdate (sPlayers state) state
+            case state of
+              Stopped -> pure $ error "Shouldn't happen"
+              InProgress game -> liftIO $ sendUpdate (sPlayers game) state
             Scotty.html $ renderText $ playerView pId state
 
-  Scotty.post "/reveal" $ auth h $ do
+  Scotty.post "/reveal" $ auth h $ \game -> do
     state <- liftIO $ atomically $ do
       modifyTVar' (hState h) reveal
       readTVar (hState h)
-    liftIO $ sendUpdate (sPlayers state) state
-    Scotty.html $ renderText $ hostView (sHost state) state
+    liftIO $ sendUpdate (sPlayers game) state
+    Scotty.html $ renderText $ hostView state
 
-  Scotty.post "/reset" $ auth h $ do
+  Scotty.post "/reset" $ auth h $ \game -> do
     state <- liftIO $ atomically $ do
       modifyTVar' (hState h) reset
       readTVar (hState h)
-    liftIO $ sendUpdate (sPlayers state) state
-    Scotty.html $ renderText $ hostView (sHost state) state
+    liftIO $ sendUpdate (sPlayers game) state
+    Scotty.html $ renderText $ hostView state
 
-  Scotty.post "/end" $ auth h $ do
-    state <- liftIO $ readTVarIO (hState h)
-    liftIO $ sendUpdate (sPlayers state) Stopped
+  Scotty.post "/end" $ auth h $ \game -> do
+    liftIO $ sendUpdate (sPlayers game) Stopped
     liftIO $ atomically $ modifyTVar' (hState h) end
-    Scotty.html $ renderText $ hostView (sHost state) Stopped
+    Scotty.html $ renderText $ hostView Stopped
 
   Scotty.get "/assets/style.css" $ do
     Scotty.setHeader "Content-Type" "text/css"
@@ -164,8 +168,7 @@ app h = do
     Scotty.setHeader "Content-Type" "image/x-icon"
     Scotty.raw $ BL.fromStrict $(embedFile "assets/favicon.ico")
 
-
-auth :: Handle -> ActionM () -> ActionM ()
+auth :: Handle -> (Game -> ActionM ()) -> ActionM ()
 auth h action = do
   mPid <- Scotty.getCookie "id"
   case fromText =<< mPid of
@@ -174,9 +177,9 @@ auth h action = do
       state <- liftIO $ readTVarIO (hState h)
       case state of
         Stopped -> Scotty.status unauthorized401
-        InProgress{..} ->
+        InProgress g@Game{..} ->
           if (sHost == pid)
-            then action
+            then action g
             else Scotty.status unauthorized401
 
 playerJoin :: Handle -> Player -> ActionM ()
@@ -184,23 +187,25 @@ playerJoin h p = do
   state <- liftIO $ atomically $ do
     modifyTVar' (hState h) (join p)
     readTVar (hState h)
-  liftIO $ sendUpdate (sPlayers state) state
+  case state of
+    Stopped -> pure $ error "Shouldn't happen"
+    InProgress game -> liftIO $ sendUpdate (sPlayers game) state
   liftIO $ Logger.logInfo (hLogger h) ("Player " <> (T.unpack $ pName p) <> " joined")
   Scotty.setSimpleCookie "id" (toText $ pId p)
   Scotty.html $ renderText (playerView (pId p) state)
 
 hostJoin :: Handle -> Player -> ActionM ()
 hostJoin h p = do
-  let state = InProgress [p] False (pId p)
+  let state = InProgress (Game [p] False (pId p))
   liftIO $ atomically $ writeTVar (hState h) state
   liftIO $ Logger.logInfo (hLogger h) ("Session started by " <> (T.unpack $ pName p))
   Scotty.setSimpleCookie "id" (toText $ pId p)
-  Scotty.html $ renderText (hostView (pId p) state)
+  Scotty.html $ renderText (hostView state)
 
 sendUpdate :: [Player] -> State -> IO ()
-sendUpdate players state =
+sendUpdate players newState =
   for_ players $ \p ->
     let channel = pChan p
-        d = [B.fromLazyByteString $ renderBS (playerView (pId p) state)]
+        d = [B.fromLazyByteString $ renderBS (playerView (pId p) newState)]
         event = ServerEvent Nothing Nothing d
      in writeChan channel event >> writeChan channel CloseEvent

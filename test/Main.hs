@@ -57,7 +57,7 @@ testsCore = do
   it "finds existing player" $ do
     property $ \player others revealed host ->
       let state =
-            InProgress
+            InProgress Game
               { sPlayers = (player : others)
               , sIsRevealed = revealed
               , sHost = host
@@ -68,7 +68,7 @@ testsCore = do
     property $ \player others revealed host ->
       let others' = filter (\o -> (pId o) /= (pId player)) others
           state =
-            InProgress
+            InProgress Game
               { sPlayers = others'
               , sIsRevealed = revealed
               , sHost = host
@@ -83,7 +83,7 @@ testsCore = do
     property $ \player others v revealed host -> do
       let others' = filter (\o -> (pId o) /= (pId player)) others
           state =
-            InProgress
+            InProgress Game
               { sPlayers = (player : others')
               , sIsRevealed = revealed
               , sHost = host
@@ -125,7 +125,7 @@ testsRoute = do
   let existingUUID = fromJust (fromString "902d870d-11b3-46cd-8296-6a9cf1a376c2")
       nonExistingUUID = fromJust (fromString "902d870d-11b3-46cd-8296-6a9cf1a376c3")
       runningState =
-        InProgress
+        InProgress Game
           { sPlayers = [Player Nothing "Jon Doe" existingUUID dummyChannel]
           , sIsRevealed = False
           , sHost = existingUUID

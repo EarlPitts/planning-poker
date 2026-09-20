@@ -52,11 +52,14 @@ instance Show Player where
 
 data State
   = Stopped
-  | InProgress
-      { sPlayers :: [Player]
-      , sIsRevealed :: Bool
-      , sHost :: UUID
-      }
+  | InProgress Game
+  deriving (Eq)
+
+data Game = Game
+  { sPlayers :: [Player]
+  , sIsRevealed :: Bool
+  , sHost :: UUID
+  }
   deriving (Eq)
 
 mkVote :: String -> Maybe Vote
@@ -76,14 +79,14 @@ initState = Stopped
 
 join :: Player -> State -> State
 join _ Stopped = Stopped
-join p s = s{sPlayers = p : sPlayers s}
+join p (InProgress g) = InProgress g{sPlayers = p : sPlayers g}
 
 newPlayer :: Text -> UUID -> Chan ServerEvent -> Player
 newPlayer = Player Nothing
 
 findPlayer :: UUID -> State -> Maybe Player
 findPlayer _ Stopped = Nothing
-findPlayer id InProgress{..} = find (\p -> pId p == id) sPlayers
+findPlayer id (InProgress Game{..}) = find (\p -> pId p == id) sPlayers
 
 playerExists :: UUID -> State -> Bool
 playerExists uuid state = maybe False (const True) $ findPlayer uuid state
@@ -93,8 +96,8 @@ gameEnded state = state == Stopped
 
 modifyPlayerVote :: UUID -> Vote -> State -> State
 modifyPlayerVote _ _ Stopped = Stopped
-modifyPlayerVote id v s@InProgress{..} =
-  s{sPlayers = update <$> sPlayers}
+modifyPlayerVote id v (InProgress g@Game{..}) =
+  InProgress g{sPlayers = update <$> sPlayers}
  where
   update p = if pId p == id then vote p v else p
 
@@ -103,11 +106,13 @@ vote p v = p{pVote = Just v}
 
 reveal :: State -> State
 reveal Stopped = Stopped
-reveal s = s{sIsRevealed = True}
+reveal (InProgress g) = InProgress g{sIsRevealed = True}
 
 reset :: State -> State
 reset Stopped = Stopped
-reset s = s{sIsRevealed = False, sPlayers = resetVote <$> sPlayers s}
+reset (InProgress s) =
+  InProgress
+    s{sIsRevealed = False, sPlayers = resetVote <$> sPlayers s}
 
 end :: State -> State
 end _ = Stopped
