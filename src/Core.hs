@@ -16,6 +16,7 @@ data Vote
   = Instant
   | Quarter
   | Half
+  | ThreeQuarters
   | One
   | OneAndHalf
   | Two
@@ -29,6 +30,7 @@ toDouble = \case
   Instant -> 0.1
   Quarter -> 0.25
   Half -> 0.5
+  ThreeQuarters -> 0.75
   One -> 1
   OneAndHalf -> 1.5
   Two -> 2
@@ -66,6 +68,7 @@ mkVote :: String -> Maybe Vote
 mkVote "0.1" = Just Instant
 mkVote "0.25" = Just Quarter
 mkVote "0.5" = Just Half
+mkVote "0.75" = Just ThreeQuarters
 mkVote "1.0" = Just One
 mkVote "1.5" = Just OneAndHalf
 mkVote "2.0" = Just Two

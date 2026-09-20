@@ -15,7 +15,6 @@ module Web (
 import Control.Applicative (empty, (<|>))
 import Control.Concurrent
 import Control.Concurrent.STM
-import Control.Monad (when)
 import Control.Monad.Trans (liftIO)
 import qualified Data.Aeson as A
 import qualified Data.Binary.Builder as B
