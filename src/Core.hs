@@ -55,14 +55,14 @@ instance Show Player where
 data State
   = Stopped
   | InProgress Game
-  deriving (Eq)
+  deriving (Eq, Show)
 
 data Game = Game
   { sPlayers :: [Player]
   , sIsRevealed :: Bool
   , sHost :: UUID
   }
-  deriving (Eq)
+  deriving (Eq, Show)
 
 mkVote :: String -> Maybe Vote
 mkVote "0.1" = Just Instant

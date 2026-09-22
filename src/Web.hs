@@ -136,9 +136,10 @@ app h = do
               modifyTVar' (hState h) (modifyPlayerVote pId pVote)
               readTVar (hState h)
             case state of
-              Stopped -> pure $ error "Shouldn't happen"
-              InProgress game -> liftIO $ sendUpdate (sPlayers game) state
-            Scotty.html $ renderText $ playerView pId state
+              Stopped -> Scotty.status $ badRequest400
+              InProgress game -> do
+                liftIO $ sendUpdate (sPlayers game) state
+                Scotty.html $ renderText $ playerView pId state
 
   Scotty.post "/reveal" $ auth h $ \game -> do
     state <- liftIO $ atomically $ do
@@ -187,11 +188,12 @@ playerJoin h p = do
     modifyTVar' (hState h) (join p)
     readTVar (hState h)
   case state of
-    Stopped -> pure $ error "Shouldn't happen"
-    InProgress game -> liftIO $ sendUpdate (sPlayers game) state
-  liftIO $ Logger.logInfo (hLogger h) ("Player " <> (T.unpack $ pName p) <> " joined")
-  Scotty.setSimpleCookie "id" (toText $ pId p)
-  Scotty.html $ renderText (playerView (pId p) state)
+    Stopped -> Scotty.status $ badRequest400
+    InProgress game -> do
+      liftIO $ sendUpdate (sPlayers game) state
+      liftIO $ Logger.logInfo (hLogger h) ("Player " <> (T.unpack $ pName p) <> " joined")
+      Scotty.setSimpleCookie "id" (toText $ pId p)
+      Scotty.html $ renderText (playerView (pId p) state)
 
 hostJoin :: Handle -> Player -> ActionM ()
 hostJoin h p = do
