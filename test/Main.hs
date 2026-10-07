@@ -4,16 +4,24 @@
 
 module Main (main) where
 
+import Control.Concurrent
 import Control.Concurrent (Chan, newChan)
+import Control.Concurrent.Async
+import Control.Concurrent.STM
 import Core
+import Data.ByteString.Char8 (ByteString)
+import qualified Data.ByteString.Char8 as BC
+import qualified Data.ByteString.Lazy.Char8 as LBC
 import Data.Maybe (fromJust)
 import qualified Data.Text as T
 import Data.UUID (fromString, toASCIIBytes)
-import GHC.Conc (newTVarIO)
 import GHC.IO (unsafePerformIO)
 import qualified Logger
-import Network.Wai (Application)
+import Network.HTTP.Types (hContentType, methodPost)
+import Network.HTTP.Types.URI (renderSimpleQuery)
+import Network.Wai (Application, Request (..), requestHeaders, requestMethod)
 import Network.Wai.EventSource.EventStream
+import Network.Wai.Test
 import Test.Hspec
 import Test.Hspec.Wai
 import Test.QuickCheck
@@ -38,6 +46,21 @@ instance Arbitrary Player where
 dummyChannel :: Chan ServerEvent
 dummyChannel = unsafePerformIO newChan
 
+postForm :: Application -> ByteString -> [(ByteString, ByteString)] -> IO SResponse
+postForm application path params =
+  runSession (srequest (SRequest req body)) application
+ where
+  body = LBC.fromStrict (renderSimpleQuery False params)
+  req =
+    (setPath defaultRequest path)
+      { requestMethod = methodPost
+      , requestHeaders = [(hContentType, "application/x-www-form-urlencoded")]
+      }
+
+joinRequest :: Application -> ByteString -> IO SResponse
+joinRequest application name =
+  postForm application "/join" [("name", name)]
+
 main :: IO ()
 main = hspec $ do
   pure ()
@@ -57,22 +80,24 @@ testsCore = do
   it "finds existing player" $ do
     property $ \player others revealed host ->
       let state =
-            InProgress Game
-              { sPlayers = (player : others)
-              , sIsRevealed = revealed
-              , sHost = host
-              }
+            InProgress
+              Game
+                { sPlayers = (player : others)
+                , sIsRevealed = revealed
+                , sHost = host
+                }
        in findPlayer (pId player) state == Just player
 
   it "doesn't find non-existent player" $ do
     property $ \player others revealed host ->
       let others' = filter (\o -> (pId o) /= (pId player)) others
           state =
-            InProgress Game
-              { sPlayers = others'
-              , sIsRevealed = revealed
-              , sHost = host
-              }
+            InProgress
+              Game
+                { sPlayers = others'
+                , sIsRevealed = revealed
+                , sHost = host
+                }
        in findPlayer (pId player) state == Nothing
 
   it "cannot modify vote in stopped game" $ do
@@ -83,11 +108,12 @@ testsCore = do
     property $ \player others v revealed host -> do
       let others' = filter (\o -> (pId o) /= (pId player)) others
           state =
-            InProgress Game
-              { sPlayers = (player : others')
-              , sIsRevealed = revealed
-              , sHost = host
-              }
+            InProgress
+              Game
+                { sPlayers = (player : others')
+                , sIsRevealed = revealed
+                , sHost = host
+                }
 
       let resultState = modifyPlayerVote (pId player) v state
 
@@ -120,16 +146,23 @@ mkApp state = do
   Logger.withHandle (Logger.Config (Just Logger.Error)) $ \logger ->
     Web.withHandle config logger s (Scotty.scottyApp . app)
 
+mkApp' :: TVar State -> IO Application
+mkApp' s = do
+  let config = Web.Config Nothing Nothing
+  Logger.withHandle (Logger.Config (Just Logger.Error)) $ \logger ->
+    Web.withHandle config logger s (Scotty.scottyApp . app)
+
 testsRoute :: Spec
 testsRoute = do
   let existingUUID = fromJust (fromString "902d870d-11b3-46cd-8296-6a9cf1a376c2")
       nonExistingUUID = fromJust (fromString "902d870d-11b3-46cd-8296-6a9cf1a376c3")
       runningState =
-        InProgress Game
-          { sPlayers = [Player Nothing "Jon Doe" existingUUID dummyChannel]
-          , sIsRevealed = False
-          , sHost = existingUUID
-          }
+        InProgress
+          Game
+            { sPlayers = [Player Nothing "Jon Doe" existingUUID dummyChannel]
+            , sIsRevealed = False
+            , sHost = existingUUID
+            }
 
   describe "GET /" $ do
     with (mkApp Stopped) $ do
@@ -144,3 +177,12 @@ testsRoute = do
       it "response with 404 when player with given id is not found" $ do
         get ("/player/" <> toASCIIBytes nonExistingUUID)
           `shouldRespondWith` 404
+
+  describe "POST /join" $ do
+    it "no race condition while joining" $ do
+      stateRef <- liftIO $ newTVarIO Stopped
+      application <- mkApp' stateRef
+      let names = (BC.pack . show) <$> ([1 .. 100] :: [Int])
+      _ <- mapConcurrently_ (joinRequest application) names
+      state <- readTVarIO stateRef
+      (length $ getPlayers state) `shouldBe` 100

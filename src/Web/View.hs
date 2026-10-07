@@ -47,13 +47,13 @@ mainView s = template "Planning Poker" $ do
       div_ [id_ "main-view"] $ do
         h2_ "Planning Poker"
         traverse_ (viewPlayer sIsRevealed) sPlayers
-        form_ [hxPost_ "/newPlayer", hxTarget_ "#main-view", hxSwap_ "outerHTML"] $ do
+        form_ [hxPost_ "/join", hxTarget_ "#main-view", hxSwap_ "outerHTML"] $ do
           input_ [name_ "name", type_ "text", placeholder_ "Enter your name..."]
           button_ "Join"
     Stopped ->
       div_ [id_ "main-view"] $ do
         h2_ "Planning Poker"
-        form_ [hxPost_ "/host", hxTarget_ "#main-view", hxSwap_ "outerHTML"] $ do
+        form_ [hxPost_ "/join", hxTarget_ "#main-view", hxSwap_ "outerHTML"] $ do
           input_ [name_ "name", type_ "text", placeholder_ "Enter your name..."]
           button_ "Start new session as Host"
 

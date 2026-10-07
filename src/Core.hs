@@ -91,6 +91,10 @@ findPlayer :: UUID -> State -> Maybe Player
 findPlayer _ Stopped = Nothing
 findPlayer id (InProgress Game{..}) = find (\p -> pId p == id) sPlayers
 
+getPlayers :: State -> [Player]
+getPlayers Stopped = []
+getPlayers (InProgress Game{..}) = sPlayers
+
 playerExists :: UUID -> State -> Bool
 playerExists uuid state = maybe False (const True) $ findPlayer uuid state
 

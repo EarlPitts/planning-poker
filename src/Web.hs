@@ -22,6 +22,7 @@ import qualified Data.ByteString.Lazy as BL
 import Data.FileEmbed
 import Data.Foldable
 import Data.Maybe (fromMaybe)
+import Data.Text (Text (..))
 import qualified Data.Text as T
 import Data.UUID
 import Data.UUID.V4
@@ -106,22 +107,39 @@ app h = do
           Just p -> Scotty.nested (eventSourceAppChan (pChan p))
           Nothing -> Scotty.status notFound404
 
-  Scotty.post "/host" $ do
+  Scotty.post "/join" $ do
     pName <- Scotty.formParam "name"
     pId <- liftIO nextRandom
     chan <- liftIO newChan
-    let p = newPlayer pName pId chan
-    state <- liftIO $ readTVarIO (hState h)
-    case state of
-      Stopped -> hostJoin h p
-      InProgress _ -> playerJoin h p
 
-  Scotty.post "/newPlayer" $ do
-    pName <- Scotty.formParam "name"
-    pId <- liftIO nextRandom
-    chan <- liftIO newChan
-    let p = newPlayer pName pId chan
-    playerJoin h p
+    (newState, result) <- liftIO $ atomically $ do
+      state <- readTVar (hState h)
+      case state of
+        Stopped -> do
+          let p = newPlayer pName pId chan
+          let newState = InProgress (Game [p] False pId)
+          writeTVar (hState h) newState
+          pure $ (newState, Right HostJoined)
+        InProgress _ ->
+          if any (\p -> pName == Core.pName p) (getPlayers state)
+            then pure $ (state, Left UserErr)
+            else do
+              let p = newPlayer pName pId chan
+              let newState = join p state
+              writeTVar (hState h) newState
+              pure $ (newState, Right PlayerJoined)
+
+    case result of
+      Right PlayerJoined -> do
+        liftIO $ sendUpdate (getPlayers newState) newState
+        liftIO $ Logger.logInfo (hLogger h) ("Player " <> (T.unpack $ pName) <> " joined")
+        Scotty.setSimpleCookie "id" (toText $ pId)
+        Scotty.html $ renderText $ playerView pId newState
+      Right HostJoined -> do
+        liftIO $ Logger.logInfo (hLogger h) ("Session started by " <> (T.unpack $ pName))
+        Scotty.setSimpleCookie "id" (toText $ pId)
+        Scotty.html $ renderText (hostView newState)
+      Left _ -> Scotty.status badRequest400
 
   Scotty.post "/vote/:id/:vote" $ do
     mVote <- mkVote <$> Scotty.pathParam "vote"
@@ -168,6 +186,10 @@ app h = do
     Scotty.setHeader "Content-Type" "image/x-icon"
     Scotty.raw $ BL.fromStrict $(embedFile "assets/favicon.ico")
 
+data Err = AuthError | UserErr deriving (Show, Eq)
+
+data JoinResult = HostJoined | PlayerJoined deriving (Show, Eq)
+
 auth :: Handle -> (Game -> ActionM ()) -> ActionM ()
 auth h action = do
   mPid <- Scotty.getCookie "id"
@@ -182,26 +204,6 @@ auth h action = do
             then action g
             else Scotty.status unauthorized401
 
-playerJoin :: Handle -> Player -> ActionM ()
-playerJoin h p = do
-  state <- liftIO $ atomically $ do
-    modifyTVar' (hState h) (join p)
-    readTVar (hState h)
-  case state of
-    Stopped -> Scotty.status $ badRequest400
-    InProgress game -> do
-      liftIO $ sendUpdate (sPlayers game) state
-      liftIO $ Logger.logInfo (hLogger h) ("Player " <> (T.unpack $ pName p) <> " joined")
-      Scotty.setSimpleCookie "id" (toText $ pId p)
-      Scotty.html $ renderText (playerView (pId p) state)
-
-hostJoin :: Handle -> Player -> ActionM ()
-hostJoin h p = do
-  let state = InProgress (Game [p] False (pId p))
-  liftIO $ atomically $ writeTVar (hState h) state
-  liftIO $ Logger.logInfo (hLogger h) ("Session started by " <> (T.unpack $ pName p))
-  Scotty.setSimpleCookie "id" (toText $ pId p)
-  Scotty.html $ renderText (hostView state)
 
 sendUpdate :: [Player] -> State -> IO ()
 sendUpdate players newState =

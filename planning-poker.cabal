@@ -63,13 +63,17 @@ test-suite planning-poker-test
   hs-source-dirs:   test
   main-is:          Main.hs
   build-depends:
+    , async
     , base
+    , bytestring
     , hspec
     , hspec-wai
+    , http-types
     , planning-poker
     , QuickCheck
     , quickcheck-instances
     , scotty
+    , stm
     , text
     , uuid
     , wai
