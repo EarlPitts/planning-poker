@@ -5,7 +5,6 @@
 module Main (main) where
 
 import Control.Concurrent
-import Control.Concurrent (Chan, newChan)
 import Control.Concurrent.Async
 import Control.Concurrent.STM
 import Core
@@ -69,10 +68,6 @@ main = hspec $ do
 
 testsCore :: Spec
 testsCore = do
-  it "cannot join stopped game" $ do
-    property $ \player ->
-      join player Stopped == Stopped
-
   it "no players in stopped game" $ do
     property $ \uuid ->
       findPlayer uuid Stopped == Nothing

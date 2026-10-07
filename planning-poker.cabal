@@ -17,6 +17,7 @@ library
     RecordWildCards
 
   exposed-modules:
+    Control.Concurrent.STM.Extra
     Core
     Logger
     Paths_planning_poker

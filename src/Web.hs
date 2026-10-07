@@ -15,6 +15,7 @@ module Web (
 import Control.Applicative (empty, (<|>))
 import Control.Concurrent
 import Control.Concurrent.STM
+import Control.Concurrent.STM.Extra
 import Control.Monad.Trans (liftIO)
 import qualified Data.Aeson as A
 import qualified Data.Binary.Builder as B
@@ -111,31 +112,15 @@ app h = do
     pName <- Scotty.formParam "name"
     pId <- liftIO nextRandom
     chan <- liftIO newChan
+    let p = newPlayer pName pId chan
 
-    (newState, result) <- liftIO $ atomically $ do
-      state <- readTVar (hState h)
-      case state of
-        Stopped -> do
-          let p = newPlayer pName pId chan
-          let newState = InProgress (Game [p] False pId)
-          writeTVar (hState h) newState
-          pure $ (newState, Right HostJoined)
-        InProgress _ ->
-          if any (\p -> pName == Core.pName p) (getPlayers state)
-            then pure $ (state, Left UserErr)
-            else do
-              let p = newPlayer pName pId chan
-              let newState = join p state
-              writeTVar (hState h) newState
-              pure $ (newState, Right PlayerJoined)
-
-    case result of
-      Right PlayerJoined -> do
+    liftIO (atomically $ transact (hState h) (playerJoin p)) >>= \case
+      Right (newState, PlayerJoined) -> do
         liftIO $ sendUpdate (getPlayers newState) newState
         liftIO $ Logger.logInfo (hLogger h) ("Player " <> (T.unpack $ pName) <> " joined")
         Scotty.setSimpleCookie "id" (toText $ pId)
         Scotty.html $ renderText $ playerView pId newState
-      Right HostJoined -> do
+      Right (newState, HostJoined) -> do
         liftIO $ Logger.logInfo (hLogger h) ("Session started by " <> (T.unpack $ pName))
         Scotty.setSimpleCookie "id" (toText $ pId)
         Scotty.html $ renderText (hostView newState)
@@ -204,6 +189,15 @@ auth h action = do
             then action g
             else Scotty.status unauthorized401
 
+playerJoin :: Player -> State -> Either Err (State, JoinResult)
+playerJoin p = \case
+  Stopped -> Right $ (InProgress (Game [p] False (pId p)), HostJoined)
+  InProgress game ->
+    if any (\o -> pName p == pName o) (sPlayers game)
+      then Left UserErr
+      else
+        let newState = InProgress (join p game)
+         in Right (newState, PlayerJoined)
 
 sendUpdate :: [Player] -> State -> IO ()
 sendUpdate players newState =

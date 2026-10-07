@@ -80,9 +80,8 @@ mkVote _ = Nothing
 initState :: State
 initState = Stopped
 
-join :: Player -> State -> State
-join _ Stopped = Stopped
-join p (InProgress g) = InProgress g{sPlayers = p : sPlayers g}
+join :: Player -> Game -> Game
+join p g = g{sPlayers = p : sPlayers g}
 
 newPlayer :: Text -> UUID -> Chan ServerEvent -> Player
 newPlayer = Player Nothing
