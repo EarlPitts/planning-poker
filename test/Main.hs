@@ -25,6 +25,7 @@ import Test.Hspec
 import Test.Hspec.Wai
 import Test.QuickCheck
 import Test.QuickCheck.Instances.UUID ()
+import Test.QuickCheck.Property (failed, succeeded)
 import Web (Config (..), app, withHandle)
 import qualified Web.Scotty as Scotty
 
@@ -68,6 +69,32 @@ main = hspec $ do
 
 testsCore :: Spec
 testsCore = do
+  it "joining when no game is running starts it as host" $ do
+    property $ \p ->
+      case playerJoin p Stopped of
+        Right (InProgress _, HostJoined) -> succeeded
+        _ -> failed
+
+  it "joining with new name succeeds" $ do
+    property $ \p1 p2 ->
+      pName p1
+        /= pName p2
+          ==> case playerJoin p1 Stopped of
+            Right (state, HostJoined) ->
+              case playerJoin p2 state of
+                Right (_, PlayerJoined) -> succeeded
+                _ -> failed
+            _ -> failed
+
+  it "joining with existing name fails" $ do
+    property $ \p1 p2 ->
+      case playerJoin p1 Stopped of
+        Right (state, HostJoined) ->
+          case playerJoin p2{pName = pName p1} state of
+            Left UserErr -> succeeded
+            _ -> failed
+        _ -> failed
+
   it "no players in stopped game" $ do
     property $ \uuid ->
       findPlayer uuid Stopped == Nothing

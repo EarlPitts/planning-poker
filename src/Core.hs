@@ -64,6 +64,10 @@ data Game = Game
   }
   deriving (Eq, Show)
 
+data Err = AuthError | UserErr deriving (Show, Eq)
+
+data JoinResult = HostJoined | PlayerJoined deriving (Show, Eq)
+
 mkVote :: String -> Maybe Vote
 mkVote "0.1" = Just Instant
 mkVote "0.25" = Just Quarter
@@ -80,8 +84,15 @@ mkVote _ = Nothing
 initState :: State
 initState = Stopped
 
-join :: Player -> Game -> Game
-join p g = g{sPlayers = p : sPlayers g}
+playerJoin :: Player -> State -> Either Err (State, JoinResult)
+playerJoin p = \case
+  Stopped -> Right $ (InProgress (Game [p] False (pId p)), HostJoined)
+  InProgress game ->
+    if any (\o -> pName p == pName o) (sPlayers game)
+      then Left UserErr
+      else
+        let newState = InProgress game{sPlayers = p : sPlayers game}
+         in Right (newState, PlayerJoined)
 
 newPlayer :: Text -> UUID -> Chan ServerEvent -> Player
 newPlayer = Player Nothing

@@ -23,7 +23,6 @@ import qualified Data.ByteString.Lazy as BL
 import Data.FileEmbed
 import Data.Foldable
 import Data.Maybe (fromMaybe)
-import Data.Text (Text (..))
 import qualified Data.Text as T
 import Data.UUID
 import Data.UUID.V4
@@ -114,9 +113,8 @@ app h = do
     chan <- liftIO newChan
     let p = newPlayer pName pId chan
 
-    liftIO (atomically $ transact (hState h) (playerJoin p)) >>= \case
+    liftIO (commit h (playerJoin p)) >>= \case
       Right (newState, PlayerJoined) -> do
-        liftIO $ sendUpdate (getPlayers newState) newState
         liftIO $ Logger.logInfo (hLogger h) ("Player " <> (T.unpack $ pName) <> " joined")
         Scotty.setSimpleCookie "id" (toText $ pId)
         Scotty.html $ renderText $ playerView pId newState
@@ -171,9 +169,13 @@ app h = do
     Scotty.setHeader "Content-Type" "image/x-icon"
     Scotty.raw $ BL.fromStrict $(embedFile "assets/favicon.ico")
 
-data Err = AuthError | UserErr deriving (Show, Eq)
-
-data JoinResult = HostJoined | PlayerJoined deriving (Show, Eq)
+commit :: Handle -> (State -> Either Err (State, a)) -> IO (Either Err (State, a))
+commit h f =
+  (atomically $ transact (hState h) f) >>= \case
+    Right (newState, a) -> do
+      sendUpdate (getPlayers newState) newState
+      pure $ Right (newState, a)
+    err -> pure $ err
 
 auth :: Handle -> (Game -> ActionM ()) -> ActionM ()
 auth h action = do
@@ -188,16 +190,6 @@ auth h action = do
           if (sHost == pid)
             then action g
             else Scotty.status unauthorized401
-
-playerJoin :: Player -> State -> Either Err (State, JoinResult)
-playerJoin p = \case
-  Stopped -> Right $ (InProgress (Game [p] False (pId p)), HostJoined)
-  InProgress game ->
-    if any (\o -> pName p == pName o) (sPlayers game)
-      then Left UserErr
-      else
-        let newState = InProgress (join p game)
-         in Right (newState, PlayerJoined)
 
 sendUpdate :: [Player] -> State -> IO ()
 sendUpdate players newState =
