@@ -64,9 +64,15 @@ data Game = Game
   }
   deriving (Eq, Show)
 
-data Err = AuthError | UserErr deriving (Show, Eq)
+data Err = AuthErr | UserErr deriving (Show, Eq)
 
 data JoinResult = HostJoined | PlayerJoined deriving (Show, Eq)
+
+data Outcome a = Outcome
+  { oState :: State
+  , oNotify :: [Player]
+  , oResult :: a
+  }
 
 mkVote :: String -> Maybe Vote
 mkVote "0.1" = Just Instant
@@ -84,15 +90,15 @@ mkVote _ = Nothing
 initState :: State
 initState = Stopped
 
-playerJoin :: Player -> State -> Either Err (State, JoinResult)
+playerJoin :: Player -> State -> Either Err (Outcome JoinResult)
 playerJoin p = \case
-  Stopped -> Right $ (InProgress (Game [p] False (pId p)), HostJoined)
+  Stopped -> Right $ Outcome (InProgress (Game [p] False (pId p))) [] HostJoined
   InProgress game ->
     if any (\o -> pName p == pName o) (sPlayers game)
       then Left UserErr
       else
         let newState = InProgress game{sPlayers = p : sPlayers game}
-         in Right (newState, PlayerJoined)
+         in Right $ Outcome newState (sPlayers game) PlayerJoined
 
 newPlayer :: Text -> UUID -> Chan ServerEvent -> Player
 newPlayer = Player Nothing
@@ -121,18 +127,36 @@ modifyPlayerVote id v (InProgress g@Game{..}) =
 vote :: Player -> Vote -> Player
 vote p v = p{pVote = Just v}
 
-reveal :: State -> State
-reveal Stopped = Stopped
-reveal (InProgress g) = InProgress g{sIsRevealed = True}
+reveal :: UUID -> State -> Either Err (Outcome ())
+reveal _ Stopped = Left UserErr
+reveal uuid (InProgress g) =
+  if uuid == sHost g
+    then Right $ Outcome (InProgress g{sIsRevealed = True}) (sPlayers g) ()
+    else Left AuthErr
 
-reset :: State -> State
-reset Stopped = Stopped
-reset (InProgress s) =
-  InProgress
-    s{sIsRevealed = False, sPlayers = resetVote <$> sPlayers s}
+reset :: UUID -> State -> Either Err (Outcome ())
+reset _ Stopped = Left UserErr
+reset uuid (InProgress g) =
+  if uuid == sHost g
+    then
+      Right $
+        Outcome
+          ( InProgress
+              g
+                { sIsRevealed = False
+                , sPlayers = resetVote <$> sPlayers g
+                }
+          )
+          (sPlayers g)
+          ()
+    else Left AuthErr
 
-end :: State -> State
-end _ = Stopped
+end :: UUID -> State -> Either Err (Outcome ())
+end _ Stopped = Left UserErr
+end uuid (InProgress g) =
+  if uuid == sHost g
+    then Right $ Outcome Stopped (sPlayers g) ()
+    else Left AuthErr
 
 resetVote :: Player -> Player
 resetVote p = p{pVote = Nothing}

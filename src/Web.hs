@@ -142,24 +142,9 @@ app h = do
                 liftIO $ sendUpdate (sPlayers game) state
                 Scotty.html $ renderText $ playerView pId state
 
-  Scotty.post "/reveal" $ auth h $ \game -> do
-    state <- liftIO $ atomically $ do
-      modifyTVar' (hState h) reveal
-      readTVar (hState h)
-    liftIO $ sendUpdate (sPlayers game) state
-    Scotty.html $ renderText $ hostView state
-
-  Scotty.post "/reset" $ auth h $ \game -> do
-    state <- liftIO $ atomically $ do
-      modifyTVar' (hState h) reset
-      readTVar (hState h)
-    liftIO $ sendUpdate (sPlayers game) state
-    Scotty.html $ renderText $ hostView state
-
-  Scotty.post "/end" $ auth h $ \game -> do
-    liftIO $ sendUpdate (sPlayers game) Stopped
-    liftIO $ atomically $ modifyTVar' (hState h) end
-    Scotty.html $ renderText $ hostView Stopped
+  Scotty.post "/reveal" $ hostAction h reveal
+  Scotty.post "/reset" $ hostAction h reset
+  Scotty.post "/end" $ hostAction h end
 
   Scotty.get "/assets/style.css" $ do
     Scotty.setHeader "Content-Type" "text/css"
@@ -169,27 +154,27 @@ app h = do
     Scotty.setHeader "Content-Type" "image/x-icon"
     Scotty.raw $ BL.fromStrict $(embedFile "assets/favicon.ico")
 
-commit :: Handle -> (State -> Either Err (State, a)) -> IO (Either Err (State, a))
-commit h f =
-  (atomically $ transact (hState h) f) >>= \case
-    Right (newState, a) -> do
-      sendUpdate (getPlayers newState) newState
-      pure $ Right (newState, a)
-    err -> pure $ err
+hostAction :: Handle -> (UUID -> State -> Either Err (Outcome a)) -> ActionM ()
+hostAction h f = withId $ \uuid ->
+  (liftIO $ commit h (f uuid)) >>= \case
+    Right (state, _) -> Scotty.html $ renderText $ hostView state
+    Left AuthErr -> Scotty.status unauthorized401
+    Left UserErr -> Scotty.status badRequest400
 
-auth :: Handle -> (Game -> ActionM ()) -> ActionM ()
-auth h action = do
+commit :: Handle -> (State -> Either Err (Outcome a)) -> IO (Either Err (State, a))
+commit h f =
+  (atomically $ transact (hState h) (fmap (\o -> (oState o, o)) . f)) >>= \case
+    Right (newState, o) -> do
+      sendUpdate (oNotify o) newState
+      pure $ Right (newState, oResult o)
+    Left err -> pure $ Left err
+
+withId :: (UUID -> ActionM ()) -> ActionM ()
+withId f = do
   mPid <- Scotty.getCookie "id"
   case fromText =<< mPid of
     Nothing -> Scotty.status unauthorized401
-    Just pid -> do
-      state <- liftIO $ readTVarIO (hState h)
-      case state of
-        Stopped -> Scotty.status unauthorized401
-        InProgress g@Game{..} ->
-          if (sHost == pid)
-            then action g
-            else Scotty.status unauthorized401
+    Just pid -> f pid
 
 sendUpdate :: [Player] -> State -> IO ()
 sendUpdate players newState =

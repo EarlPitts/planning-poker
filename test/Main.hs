@@ -72,7 +72,7 @@ testsCore = do
   it "joining when no game is running starts it as host" $ do
     property $ \p ->
       case playerJoin p Stopped of
-        Right (InProgress _, HostJoined) -> succeeded
+        Right (Outcome (InProgress _) _ HostJoined) -> succeeded
         _ -> failed
 
   it "joining with new name succeeds" $ do
@@ -80,16 +80,16 @@ testsCore = do
       pName p1
         /= pName p2
           ==> case playerJoin p1 Stopped of
-            Right (state, HostJoined) ->
+            Right (Outcome state _ HostJoined) ->
               case playerJoin p2 state of
-                Right (_, PlayerJoined) -> succeeded
+                Right (Outcome _ _ PlayerJoined) -> succeeded
                 _ -> failed
             _ -> failed
 
   it "joining with existing name fails" $ do
     property $ \p1 p2 ->
       case playerJoin p1 Stopped of
-        Right (state, HostJoined) ->
+        Right (Outcome state _ HostJoined) ->
           case playerJoin p2{pName = pName p1} state of
             Left UserErr -> succeeded
             _ -> failed
