@@ -124,7 +124,7 @@ testsCore = do
 
   it "cannot modify vote in stopped game" $ do
     property $ \uuid v ->
-      modifyPlayerVote uuid v Stopped == Stopped
+      modifyPlayerVote uuid v Stopped == Left UserErr
 
   it "voting for player works" $ do
     property $ \player others v revealed host -> do
@@ -137,7 +137,7 @@ testsCore = do
                 , sHost = host
                 }
 
-      let resultState = modifyPlayerVote (pId player) v state
+      let Right (Outcome resultState _ _) = modifyPlayerVote (pId player) v state
 
       let finalVote = pVote <$> findPlayer (pId player) resultState
       finalVote === Just (Just v)

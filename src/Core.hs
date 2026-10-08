@@ -73,6 +73,7 @@ data Outcome a = Outcome
   , oNotify :: [Player]
   , oResult :: a
   }
+  deriving (Show, Eq)
 
 mkVote :: String -> Maybe Vote
 mkVote "0.1" = Just Instant
@@ -117,12 +118,15 @@ playerExists uuid state = maybe False (const True) $ findPlayer uuid state
 gameEnded :: State -> Bool
 gameEnded state = state == Stopped
 
-modifyPlayerVote :: UUID -> Vote -> State -> State
-modifyPlayerVote _ _ Stopped = Stopped
-modifyPlayerVote id v (InProgress g@Game{..}) =
-  InProgress g{sPlayers = update <$> sPlayers}
- where
-  update p = if pId p == id then vote p v else p
+modifyPlayerVote :: UUID -> Vote -> State -> Either Err (Outcome ())
+modifyPlayerVote uuid v = \case
+  Stopped -> Left UserErr
+  s@(InProgress g@Game{..}) ->
+    if playerExists uuid s
+      then
+        let update p = if pId p == uuid then vote p v else p
+         in Right $ Outcome (InProgress g{sPlayers = update <$> sPlayers}) sPlayers ()
+      else Left UserErr
 
 vote :: Player -> Vote -> Player
 vote p v = p{pVote = Just v}

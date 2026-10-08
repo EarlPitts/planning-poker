@@ -124,23 +124,16 @@ app h = do
         Scotty.html $ renderText (hostView newState)
       Left _ -> Scotty.status badRequest400
 
-  Scotty.post "/vote/:id/:vote" $ do
+  Scotty.post "/vote/:id/:vote" $ withId $ \uuid -> do
     mVote <- mkVote <$> Scotty.pathParam "vote"
+
     case mVote of
       Nothing -> Scotty.status badRequest400
-      Just pVote -> do
-        mId <- Scotty.pathParam "id"
-        case fromString mId of
-          Nothing -> Scotty.status badRequest400
-          Just pId -> do
-            state <- liftIO $ atomically $ do
-              modifyTVar' (hState h) (modifyPlayerVote pId pVote)
-              readTVar (hState h)
-            case state of
-              Stopped -> Scotty.status $ badRequest400
-              InProgress game -> do
-                liftIO $ sendUpdate (sPlayers game) state
-                Scotty.html $ renderText $ playerView pId state
+      Just v ->
+        liftIO (commit h (modifyPlayerVote uuid v)) >>= \case
+          Left _ -> Scotty.status $ badRequest400
+          Right (newState, ()) ->
+            Scotty.html $ renderText $ playerView uuid newState
 
   Scotty.post "/reveal" $ hostAction h reveal
   Scotty.post "/reset" $ hostAction h reset
