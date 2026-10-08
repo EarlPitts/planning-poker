@@ -97,15 +97,11 @@ app h = do
           pure $ template "Planning Poker" $ view' state
     Scotty.html $ renderText $ fromMaybe (mainView state) view
 
-  Scotty.get "/player/:id" $ do
-    mId <- Scotty.pathParam "id"
-    case fromString mId of
-      Nothing -> Scotty.status badRequest400
-      Just pId -> do
-        state <- liftIO $ readTVarIO (hState h)
-        case findPlayer pId state of
-          Just p -> Scotty.nested (eventSourceAppChan (pChan p))
-          Nothing -> Scotty.status notFound404
+  Scotty.get "/player" $ withId $ \uuid -> do
+    state <- liftIO $ readTVarIO (hState h)
+    case findPlayer uuid state of
+      Just p -> Scotty.nested (eventSourceAppChan (pChan p))
+      Nothing -> Scotty.status notFound404
 
   Scotty.post "/join" $ do
     pName <- Scotty.formParam "name"
@@ -124,7 +120,7 @@ app h = do
         Scotty.html $ renderText (hostView newState)
       Left _ -> Scotty.status badRequest400
 
-  Scotty.post "/vote/:id/:vote" $ withId $ \uuid -> do
+  Scotty.post "/vote/:vote" $ withId $ \uuid -> do
     mVote <- mkVote <$> Scotty.pathParam "vote"
 
     case mVote of

@@ -16,11 +16,11 @@ import qualified Data.Text as T
 import Data.UUID (fromString, toASCIIBytes)
 import GHC.IO (unsafePerformIO)
 import qualified Logger
-import Network.HTTP.Types (hContentType, methodPost)
+import Network.HTTP.Types (hContentType, hCookie, methodGet, methodPost)
 import Network.HTTP.Types.URI (renderSimpleQuery)
 import Network.Wai (Application, Request (..), requestHeaders, requestMethod)
 import Network.Wai.EventSource.EventStream
-import Network.Wai.Test
+import Network.Wai.Test hiding (request)
 import Test.Hspec
 import Test.Hspec.Wai
 import Test.QuickCheck
@@ -191,14 +191,15 @@ testsRoute = do
       it "response with 200 when no game is in progress" $ do
         get "/" `shouldRespondWith` 200
 
-  describe "GET /player/:id" $ do
+  describe "GET /player" $ do
     with (mkApp runningState) $ do
-      it "response with 400 when id is not valid UUID" $ do
-        get "/player/not-uuid" `shouldRespondWith` 400
+      it "response with 401 when id is not valid UUID" $ do
+        request methodGet "/player" [(hCookie, "playerId=" <> "not-a-uuid")] ""
+          `shouldRespondWith` 401
 
-      it "response with 404 when player with given id is not found" $ do
-        get ("/player/" <> toASCIIBytes nonExistingUUID)
-          `shouldRespondWith` 404
+      it "response with 401 when player with given id is not found" $ do
+        request methodGet "/player" [(hCookie, "playerId=" <> (toASCIIBytes nonExistingUUID))] ""
+          `shouldRespondWith` 401
 
   describe "POST /join" $ do
     it "no race condition while joining" $ do

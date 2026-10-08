@@ -61,7 +61,7 @@ playerView :: UUID -> State -> Html ()
 playerView _ Stopped = p_ "Session ended"
 playerView id (InProgress Game{..}) = div_
   [ id_ "player-view"
-  , sseConnect_ $ "/player/" <> toText id
+  , sseConnect_ $ "/player"
   , sseSwap_ "message"
   , hxSwap_ "outerHTML"
   ]
@@ -72,7 +72,7 @@ playerView id (InProgress Game{..}) = div_
       traverse_ (viewPlayer True) p
       traverse_ (viewPlayer sIsRevealed) rest
     when sIsRevealed $ statView sPlayers
-    voteButtons id
+    voteButtons
 
 statView :: [Player] -> Html ()
 statView ps = div_ [] $ do
@@ -82,13 +82,13 @@ statView ps = div_ [] $ do
     Just (top, bot) ->
       p_ $ "Fight: " <> (toHtml $ show $ top) <> " vs " <> (toHtml $ show $ bot)
 
-voteButtons :: UUID -> Html ()
-voteButtons pId = traverse_ (btn . T.pack . show) ([minBound .. maxBound] :: [Vote])
+voteButtons :: Html ()
+voteButtons = traverse_ (btn . T.pack . show) ([minBound .. maxBound] :: [Vote])
  where
   btn :: Text -> Html ()
   btn num =
     button_
-      [ hxPost_ $ "/vote/" <> (toText pId) <> "/" <> num
+      [ hxPost_ $ "/vote/" <> num
       , hxTarget_ "#player-view"
       , hxSwap_ "outerHTML"
       ]
