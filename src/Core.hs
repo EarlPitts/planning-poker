@@ -106,7 +106,7 @@ newPlayer = Player Nothing
 
 findPlayer :: UUID -> State -> Maybe Player
 findPlayer _ Stopped = Nothing
-findPlayer id (InProgress Game{..}) = find (\p -> pId p == id) sPlayers
+findPlayer uuid (InProgress Game{..}) = find (\p -> pId p == uuid) sPlayers
 
 getPlayers :: State -> [Player]
 getPlayers Stopped = []
@@ -125,42 +125,64 @@ modifyPlayerVote uuid v = \case
     if playerExists uuid s
       then
         let update p = if pId p == uuid then vote p v else p
-         in Right $ Outcome (InProgress g{sPlayers = update <$> sPlayers}) sPlayers ()
+         in Right $
+              Outcome
+                (InProgress g{sPlayers = update <$> sPlayers})
+                (filter (\p -> (pId p) /= uuid) sPlayers)
+                ()
       else Left UserErr
 
 vote :: Player -> Vote -> Player
 vote p v = p{pVote = Just v}
 
 reveal :: UUID -> State -> Either Err (Outcome ())
-reveal _ Stopped = Left UserErr
-reveal uuid (InProgress g) =
-  if uuid == sHost g
-    then Right $ Outcome (InProgress g{sIsRevealed = True}) (sPlayers g) ()
-    else Left AuthErr
+reveal uuid =
+  hostOnly
+    ( \game ->
+        Outcome
+          { oState = InProgress game{sIsRevealed = True}
+          , oNotify = (filter (\p -> (pId p) /= uuid) (sPlayers game))
+          , oResult = ()
+          }
+    )
+    uuid
 
 reset :: UUID -> State -> Either Err (Outcome ())
-reset _ Stopped = Left UserErr
-reset uuid (InProgress g) =
-  if uuid == sHost g
-    then
-      Right $
+reset uuid =
+  hostOnly
+    ( \game ->
         Outcome
-          ( InProgress
-              g
-                { sIsRevealed = False
-                , sPlayers = resetVote <$> sPlayers g
-                }
-          )
-          (sPlayers g)
-          ()
-    else Left AuthErr
+          { oState =
+              InProgress
+                game
+                  { sIsRevealed = False
+                  , sPlayers = resetVote <$> sPlayers game
+                  }
+          , oNotify = filter (\p -> (pId p) /= uuid) (sPlayers game)
+          , oResult = ()
+          }
+    )
+    uuid
 
 end :: UUID -> State -> Either Err (Outcome ())
-end _ Stopped = Left UserErr
-end uuid (InProgress g) =
-  if uuid == sHost g
-    then Right $ Outcome Stopped (sPlayers g) ()
-    else Left AuthErr
+end uuid =
+  hostOnly
+    ( \game ->
+        Outcome
+          { oState = Stopped
+          , oNotify = filter (\p -> (pId p) /= uuid) (sPlayers game)
+          , oResult = ()
+          }
+    )
+    uuid
+
+hostOnly :: (Game -> Outcome ()) -> UUID -> State -> Either Err (Outcome ())
+hostOnly f uuid = \case
+  Stopped -> Left UserErr
+  InProgress g ->
+    if uuid == sHost g
+      then Right (f g)
+      else Left AuthErr
 
 resetVote :: Player -> Player
 resetVote p = p{pVote = Nothing}
