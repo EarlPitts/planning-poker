@@ -22,7 +22,6 @@ import qualified Data.Binary.Builder as B
 import qualified Data.ByteString.Lazy as BL
 import Data.FileEmbed
 import Data.Foldable
-import Data.Map ((!))
 import qualified Data.Map as M
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
@@ -39,7 +38,6 @@ import qualified Web.Scotty as Scotty
 import qualified Web.Scotty.Cookie as Scotty
 
 import Core
-import Web.Scotty.Internal.Types (ActionT)
 import Web.View
 
 data Config = Config
