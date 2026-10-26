@@ -209,6 +209,13 @@ playerJoin gameId player (State games) = case M.lookup gameId games of
 resetVote :: Player -> Player
 resetVote p = p{pVote = Nothing}
 
+getChannel :: UUID -> UUID -> State -> Either Err (State, Chan ServerEvent)
+getChannel gameId userId (State games) = case M.lookup gameId games of
+  Nothing -> Left UserErr
+  Just game -> case findPlayer userId game of
+    Nothing -> Left UserErr
+    Just p -> Right $ (State games, pChan p)
+
 voteAverage :: [Player] -> Double
 voteAverage players = vSum / fromIntegral pNum
  where

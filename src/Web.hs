@@ -171,12 +171,11 @@ app h = do
     userId <- getUserId
     gameId <- getGameId
 
-    (State games) <- liftIO $ readTVarIO (hState h)
-    case M.lookup gameId games of
-      Nothing -> Scotty.status notFound404
-      Just game -> case findPlayer userId game of
-        Nothing -> Scotty.status notFound404
-        Just p -> Scotty.nested (eventSourceAppChan (pChan p))
+    result <- liftIO $ atomically $ transact (hState h) $ getChannel gameId userId
+
+    case result of
+      Left _ -> Scotty.status badRequest400
+      Right (_, chan) -> Scotty.nested (eventSourceAppChan chan)
 
 createPlayer :: Text -> IO Player
 createPlayer name = do
