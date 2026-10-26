@@ -171,33 +171,12 @@ app h = do
     gameId <- getGameId
     vote <- getVote
 
-    (State games) <- liftIO $ readTVarIO (hState h)
-    case M.lookup gameId games of
-      Nothing -> Scotty.status notFound404
-      Just game -> do
-        case findPlayer userId game of
-          Nothing -> Scotty.status notFound404
-          Just p -> do
-            let newPlayer = changeVote p vote
+    result <- liftIO $ atomically $ transact (hState h) $ (modifyVote gameId userId vote)
 
-            (State state) <- liftIO $
-              atomically $ do
-                modifyTVar
-                  (hState h)
-                  ( \(State games) ->
-                      State $
-                        M.adjust
-                          ( \game -> do
-                              let ps = fmap (\p' -> if pId p' == pId p then newPlayer else p') (gPlayers game)
-                              game{gPlayers = ps}
-                          )
-                          gameId
-                          games
-                  )
-                readTVar (hState h)
-
-            let game = state ! gameId
-            liftIO $ sendUpdate (gPlayers game) gameId game
+    case result of
+      Left _ -> Scotty.status badRequest400
+      Right (_, game) ->
+        liftIO $ sendUpdate (gPlayers game) gameId game
 
   Scotty.get "/:gameId/player" $ do
     mGameId <- fromText <$> Scotty.pathParam "gameId"
