@@ -1,6 +1,5 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE QuasiQuotes #-}
 
 module Main (main) where
 
@@ -69,8 +68,7 @@ testInitState = State $ M.fromList [(fakeGameId, Game [] False fakeHostId)]
 main :: IO ()
 main = hspec $ do
   testsCore
-
--- testsRoute
+  -- testsRoute
 
 testsCore :: Spec
 testsCore = do
@@ -176,21 +174,27 @@ mkApp' s = do
 -- testsRoute = do
 --   let existingUUID = fromJust (fromString "902d870d-11b3-46cd-8296-6a9cf1a376c2")
 --       nonExistingUUID = fromJust (fromString "902d870d-11b3-46cd-8296-6a9cf1a376c3")
---       runningState =
---         InProgress
---           Game
---             { sPlayers = [Player Nothing "Jon Doe" existingUUID dummyChannel]
---             , sIsRevealed = False
---             , sHost = existingUUID
---             }
+--       state =
+--         State $
+--           M.fromList
+--             [
+--               ( fakeGameId
+--               , Game
+--                   { gPlayers = [Player Nothing "Jon Doe" existingUUID dummyChannel]
+--                   , gIsRevealed = False
+--                   , gHost = existingUUID
+--                   }
+--               )
+--             ]
 --
 --   describe "GET /" $ do
---     with (mkApp Stopped) $ do
+--     with (mkApp state) $ do
 --       it "response with 200 when no game is in progress" $ do
 --         get "/" `shouldRespondWith` 200
 --
+--
 --   describe "GET /player" $ do
---     with (mkApp runningState) $ do
+--     with (mkApp state) $ do
 --       it "response with 401 when id is not valid UUID" $ do
 --         request methodGet "/player" [(hCookie, "playerId=" <> "not-a-uuid")] ""
 --           `shouldRespondWith` 401
@@ -198,12 +202,12 @@ mkApp' s = do
 --       it "response with 401 when player with given id is not found" $ do
 --         request methodGet "/player" [(hCookie, "playerId=" <> (toASCIIBytes nonExistingUUID))] ""
 --           `shouldRespondWith` 401
---
---   describe "POST /join" $ do
---     it "no race condition while joining" $ do
---       stateRef <- liftIO $ newTVarIO Stopped
---       application <- mkApp' stateRef
---       let names = (BC.pack . show) <$> ([1 .. 100] :: [Int])
---       _ <- mapConcurrently_ (joinRequest application) names
---       state <- readTVarIO stateRef
---       (length $ getPlayers state) `shouldBe` 100
+
+  -- describe "POST /join" $ do
+  --   it "no race condition while joining" $ do
+  --     stateRef <- liftIO $ newTVarIO initState
+  --     application <- mkApp' stateRef
+  --     let names = (BC.pack . show) <$> ([1 .. 100] :: [Int])
+  --     _ <- mapConcurrently_ (joinRequest application) names
+  --     state <- readTVarIO stateRef
+  --     (length $ getPlayers state) `shouldBe` 100
