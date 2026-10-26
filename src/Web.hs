@@ -22,19 +22,24 @@ import qualified Data.Binary.Builder as B
 import qualified Data.ByteString.Lazy as BL
 import Data.FileEmbed
 import Data.Foldable
+import Data.Map ((!))
+import qualified Data.Map as M
 import Data.Maybe (fromMaybe)
+import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.Lazy as TL
 import Data.UUID
 import Data.UUID.V4
 import qualified Logger
 import Lucid hiding (for_)
 import Network.HTTP.Types.Status (badRequest400, notFound404, unauthorized401)
 import Network.Wai.EventSource (ServerEvent (..), eventSourceAppChan)
-import Web.Scotty (ActionM, ScottyM)
+import Web.Scotty (ActionM, ScottyM, finish)
 import qualified Web.Scotty as Scotty
 import qualified Web.Scotty.Cookie as Scotty
 
 import Core
+import Web.Scotty.Internal.Types (ActionT)
 import Web.View
 
 data Config = Config
@@ -82,58 +87,7 @@ run h = Scotty.scotty port (app h)
 app :: Handle -> ScottyM ()
 app h = do
   Scotty.get "/" $ do
-    existingId <- Scotty.getCookie "id"
-    state <- liftIO $ readTVarIO (hState h)
-    let view = do
-          game <- case state of
-            Stopped -> Nothing
-            InProgress game -> Just game
-          pid <- fromText =<< existingId
-          p <- findPlayer pid state
-          let view' =
-                if (sHost game == pId p)
-                  then hostView
-                  else playerView pid
-          pure $ template "Planning Poker" $ view' state
-    Scotty.html $ renderText $ fromMaybe (mainView state) view
-
-  Scotty.get "/player" $ withId $ \uuid -> do
-    state <- liftIO $ readTVarIO (hState h)
-    case findPlayer uuid state of
-      Just p -> Scotty.nested (eventSourceAppChan (pChan p))
-      Nothing -> Scotty.status notFound404
-
-  Scotty.post "/join" $ do
-    pName <- Scotty.formParam "name"
-    pId <- liftIO nextRandom
-    chan <- liftIO newChan
-    let p = newPlayer pName pId chan
-
-    liftIO (commit h (playerJoin p)) >>= \case
-      Right (newState, PlayerJoined) -> do
-        liftIO $ Logger.logInfo (hLogger h) ("Player " <> (T.unpack $ pName) <> " joined")
-        Scotty.setSimpleCookie "id" (toText $ pId)
-        Scotty.html $ renderText $ playerView pId newState
-      Right (newState, HostJoined) -> do
-        liftIO $ Logger.logInfo (hLogger h) ("Session started by " <> (T.unpack $ pName))
-        Scotty.setSimpleCookie "id" (toText $ pId)
-        Scotty.html $ renderText (hostView newState)
-      Left _ -> Scotty.status badRequest400
-
-  Scotty.post "/vote/:vote" $ withId $ \uuid -> do
-    mVote <- mkVote <$> Scotty.pathParam "vote"
-
-    case mVote of
-      Nothing -> Scotty.status badRequest400
-      Just v ->
-        liftIO (commit h (modifyPlayerVote uuid v)) >>= \case
-          Left _ -> Scotty.status $ badRequest400
-          Right (newState, ()) ->
-            Scotty.html $ renderText $ playerView uuid newState
-
-  Scotty.post "/reveal" $ hostAction h reveal
-  Scotty.post "/reset" $ hostAction h reset
-  Scotty.post "/end" $ hostAction h end
+    Scotty.html $ renderText mainView
 
   Scotty.get "/assets/style.css" $ do
     Scotty.setHeader "Content-Type" "text/css"
@@ -143,32 +97,159 @@ app h = do
     Scotty.setHeader "Content-Type" "image/x-icon"
     Scotty.raw $ BL.fromStrict $(embedFile "assets/favicon.ico")
 
-hostAction :: Handle -> (UUID -> State -> Either Err (Outcome a)) -> ActionM ()
-hostAction h f = withId $ \uuid ->
-  (liftIO $ commit h (f uuid)) >>= \case
-    Right (state, _) -> Scotty.html $ renderText $ hostView state
-    Left AuthErr -> Scotty.status unauthorized401
-    Left UserErr -> Scotty.status badRequest400
+  Scotty.post "/create" $ do
+    hostName <- Scotty.formParam "name"
+    gameId <- liftIO $ nextRandom
+    host <- liftIO $ createPlayer hostName
 
-commit :: Handle -> (State -> Either Err (Outcome a)) -> IO (Either Err (State, a))
-commit h f =
-  (atomically $ transact (hState h) (fmap (\o -> (oState o, o)) . f)) >>= \case
-    Right (newState, o) -> do
-      sendUpdate (oNotify o) newState
-      pure $ Right (newState, oResult o)
-    Left err -> pure $ Left err
+    let game = initGame host
+    liftIO $ atomically $ addGame (hState h) gameId game
 
-withId :: (UUID -> ActionM ()) -> ActionM ()
-withId f = do
-  mPid <- Scotty.getCookie "id"
-  case fromText =<< mPid of
-    Nothing -> Scotty.status unauthorized401
-    Just pid -> f pid
+    Scotty.setSimpleCookie "userId" (toText $ pId host)
+    Scotty.redirect $ "/" <> (TL.fromStrict $ toText gameId)
 
-sendUpdate :: [Player] -> State -> IO ()
-sendUpdate players newState =
+  Scotty.post "/:gameId/reveal" $ do
+    gameId <- getGameId
+    userId <- getUserId
+
+    result <- liftIO $ atomically $ transact (hState h) $ (reveal gameId userId)
+
+    case result of
+      Left _ -> Scotty.status badRequest400
+      Right (_, game) ->
+        liftIO $ sendUpdate (gPlayers game) gameId game
+
+  Scotty.post "/:gameId/reset" $ do
+    gameId <- getGameId
+    userId <- getUserId
+
+    result <- liftIO $ atomically $ transact (hState h) $ (reset gameId userId)
+
+    case result of
+      Left _ -> Scotty.status badRequest400
+      Right (_, game) ->
+        liftIO $ sendUpdate (gPlayers game) gameId game
+
+  Scotty.get "/:gameId" $ do
+    gameId <- getGameId
+
+    (State games) <- liftIO $ readTVarIO (hState h)
+    case M.lookup gameId games of
+      Nothing -> Scotty.status notFound404
+      Just game -> do
+        mUserIdStr <- Scotty.getCookie "userId"
+        let mUserId = fromText =<< mUserIdStr
+        Scotty.html $ renderText (gameView gameId mUserId game)
+
+  Scotty.post "/:gameId/join" $ do
+    gameId <- getGameId
+
+    (State games) <- liftIO $ readTVarIO (hState h)
+    case M.lookup gameId games of
+      Nothing -> Scotty.status notFound404
+      Just game -> do
+        name <- Scotty.formParam "name"
+        p <- liftIO $ createPlayer name
+
+        (State state) <- liftIO $
+          atomically $ do
+            modifyTVar
+              (hState h)
+              ( \(State games) ->
+                  State $
+                    M.adjust (\game -> game{gPlayers = p : gPlayers game}) gameId games
+              )
+            readTVar (hState h)
+
+        let game = state ! gameId
+        liftIO $ sendUpdate (gPlayers game) gameId game
+        Scotty.setSimpleCookie "userId" (toText $ pId p)
+        Scotty.html $ renderText (playerView (pId p) gameId game)
+
+  Scotty.post "/:gameId/vote/:vote" $ do
+    userId <- getUserId
+    gameId <- getGameId
+    vote <- getVote
+
+    (State games) <- liftIO $ readTVarIO (hState h)
+    case M.lookup gameId games of
+      Nothing -> Scotty.status notFound404
+      Just game -> do
+        case findPlayer userId game of
+          Nothing -> Scotty.status notFound404
+          Just p -> do
+            let newPlayer = changeVote p vote
+
+            (State state) <- liftIO $
+              atomically $ do
+                modifyTVar
+                  (hState h)
+                  ( \(State games) ->
+                      State $
+                        M.adjust
+                          ( \game -> do
+                              let ps = fmap (\p' -> if pId p' == pId p then newPlayer else p') (gPlayers game)
+                              game{gPlayers = ps}
+                          )
+                          gameId
+                          games
+                  )
+                readTVar (hState h)
+
+            let game = state ! gameId
+            liftIO $ sendUpdate (gPlayers game) gameId game
+
+  Scotty.get "/:gameId/player" $ do
+    mGameId <- fromText <$> Scotty.pathParam "gameId"
+    case mGameId of
+      Nothing -> Scotty.status badRequest400
+      Just gameId -> do
+        (State games) <- liftIO $ readTVarIO (hState h)
+        case M.lookup gameId games of
+          Nothing -> Scotty.status notFound404
+          Just game -> do
+            mUserIdStr <- Scotty.getCookie "userId"
+            case fromText =<< mUserIdStr of
+              Nothing -> Scotty.status notFound404
+              Just userId -> case findPlayer userId game of
+                Nothing -> Scotty.status notFound404
+                Just p -> Scotty.nested (eventSourceAppChan (pChan p))
+
+createPlayer :: Text -> IO Player
+createPlayer name = do
+  userId <- nextRandom
+  chan <- newChan
+  pure $ newPlayer name userId chan
+
+addGame :: TVar State -> UUID -> Game -> STM ()
+addGame stateRef gameId game = do
+  modifyTVar stateRef (\(State games) -> State $ M.insert gameId game games)
+
+sendUpdate :: [Player] -> UUID -> Game -> IO ()
+sendUpdate players gameId game =
   for_ players $ \p ->
     let channel = pChan p
-        d = [B.fromLazyByteString $ renderBS (playerView (pId p) newState)]
+        d = [B.fromLazyByteString $ renderBS (playerView (pId p) gameId game)]
         event = ServerEvent Nothing Nothing d
      in writeChan channel event >> writeChan channel CloseEvent
+
+getUserId :: ActionM UUID
+getUserId = do
+  mUserIdStr <- Scotty.getCookie "userId"
+  case fromText =<< mUserIdStr of
+    Nothing -> Scotty.status badRequest400 >> finish
+    Just userId -> pure userId
+
+getGameId :: ActionM UUID
+getGameId = do
+  mGameId <- fromText <$> Scotty.pathParam "gameId"
+  case mGameId of
+    Nothing -> Scotty.status badRequest400 >> finish
+    Just gameId -> pure gameId
+
+getVote :: ActionM Vote
+getVote = do
+  mVote <- mkVote <$> Scotty.pathParam "vote"
+  case mVote of
+    Nothing -> Scotty.status badRequest400 >> finish
+    Just vote -> pure vote

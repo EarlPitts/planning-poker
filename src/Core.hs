@@ -5,7 +5,9 @@ module Core where
 
 import Control.Concurrent.Chan
 import Data.List (find, groupBy, sortOn)
-import Data.Maybe (catMaybes)
+import Data.Map (Map)
+import qualified Data.Map as M
+import Data.Maybe (catMaybes, fromJust)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.UUID
@@ -52,15 +54,15 @@ data Player = Player
 instance Show Player where
   show Player{..} = T.unpack pName
 
-data State
-  = Stopped
-  | InProgress Game
+data State = State
+  { sGames :: Map UUID Game
+  }
   deriving (Eq, Show)
 
 data Game = Game
-  { sPlayers :: [Player]
-  , sIsRevealed :: Bool
-  , sHost :: UUID
+  { gPlayers :: [Player]
+  , gIsRevealed :: Bool
+  , gHost :: UUID
   }
   deriving (Eq, Show)
 
@@ -69,7 +71,7 @@ data Err = AuthErr | UserErr deriving (Show, Eq)
 data JoinResult = HostJoined | PlayerJoined deriving (Show, Eq)
 
 data Outcome a = Outcome
-  { oState :: State
+  { oGame :: Game
   , oNotify :: [Player]
   , oResult :: a
   }
@@ -89,100 +91,86 @@ mkVote "5.0" = Just Five
 mkVote _ = Nothing
 
 initState :: State
-initState = Stopped
+initState = State mempty
 
-playerJoin :: Player -> State -> Either Err (Outcome JoinResult)
-playerJoin p = \case
-  Stopped -> Right $ Outcome (InProgress (Game [p] False (pId p))) [] HostJoined
-  InProgress game ->
-    if any (\o -> pName p == pName o) (sPlayers game)
-      then Left UserErr
-      else
-        let newState = InProgress game{sPlayers = p : sPlayers game}
-         in Right $ Outcome newState (sPlayers game) PlayerJoined
+withGame' :: UUID -> (Game -> Either Err Game) -> State -> Either Err State
+withGame' gameId f (State games) = case M.lookup gameId games of
+  Nothing -> Left UserErr
+  Just game -> case f game of
+    Left err -> Left err
+    Right newGame -> Right $ State (M.adjust (const newGame) gameId games)
+
+playerJoin :: Player -> Game -> Either Err Game
+playerJoin p game@Game{..} =
+  if any (\o -> pName p == pName o) gPlayers
+    then Left UserErr
+    else Right $ game{gPlayers = p : gPlayers}
+
+findGame :: UUID -> State -> Maybe Game
+findGame uuid (State games) = games M.!? uuid
+
+initGame :: Player -> Game
+initGame host =
+  Game
+    { gPlayers = [host]
+    , gIsRevealed = False
+    , gHost = pId host
+    }
 
 newPlayer :: Text -> UUID -> Chan ServerEvent -> Player
 newPlayer = Player Nothing
 
-findPlayer :: UUID -> State -> Maybe Player
-findPlayer _ Stopped = Nothing
-findPlayer uuid (InProgress Game{..}) = find (\p -> pId p == uuid) sPlayers
+findPlayer :: UUID -> Game -> Maybe Player
+findPlayer uuid Game{..} = find (\p -> pId p == uuid) gPlayers
 
-getPlayers :: State -> [Player]
-getPlayers Stopped = []
-getPlayers (InProgress Game{..}) = sPlayers
+getPlayers :: Game -> [Player]
+getPlayers Game{..} = gPlayers
 
-playerExists :: UUID -> State -> Bool
-playerExists uuid state = maybe False (const True) $ findPlayer uuid state
+playerExists :: UUID -> Game -> Bool
+playerExists uuid game = maybe False (const True) $ findPlayer uuid game
 
-gameEnded :: State -> Bool
-gameEnded state = state == Stopped
+changeVote :: Player -> Vote -> Player
+changeVote p v = p{pVote = Just v}
 
-modifyPlayerVote :: UUID -> Vote -> State -> Either Err (Outcome ())
-modifyPlayerVote uuid v = \case
-  Stopped -> Left UserErr
-  s@(InProgress g@Game{..}) ->
-    if playerExists uuid s
-      then
-        let update p = if pId p == uuid then vote p v else p
-         in Right $
-              Outcome
-                (InProgress g{sPlayers = update <$> sPlayers})
-                (filter (\p -> (pId p) /= uuid) sPlayers)
-                ()
-      else Left UserErr
+reset :: UUID -> UUID -> State -> Either Err (State, Game)
+reset gameId userId (State games) =
+  case M.lookup gameId games of
+    Nothing -> Left UserErr
+    Just game -> do
+      if userId /= gHost game
+        then Left UserErr
+        else
+          let (mNewGame, newState) =
+                M.updateLookupWithKey
+                  ( \_ g ->
+                      Just $
+                        g
+                          { gIsRevealed = False
+                          , gPlayers = resetVote <$> gPlayers game
+                          }
+                  )
+                  gameId
+                  games
+           in case mNewGame of
+                Nothing -> Left UserErr
+                Just newGame -> Right (State newState, newGame)
 
-vote :: Player -> Vote -> Player
-vote p v = p{pVote = Just v}
-
-reveal :: UUID -> State -> Either Err (Outcome ())
-reveal uuid =
-  hostOnly
-    ( \game ->
-        Outcome
-          { oState = InProgress game{sIsRevealed = True}
-          , oNotify = (filter (\p -> (pId p) /= uuid) (sPlayers game))
-          , oResult = ()
-          }
-    )
-    uuid
-
-reset :: UUID -> State -> Either Err (Outcome ())
-reset uuid =
-  hostOnly
-    ( \game ->
-        Outcome
-          { oState =
-              InProgress
-                game
-                  { sIsRevealed = False
-                  , sPlayers = resetVote <$> sPlayers game
-                  }
-          , oNotify = filter (\p -> (pId p) /= uuid) (sPlayers game)
-          , oResult = ()
-          }
-    )
-    uuid
-
-end :: UUID -> State -> Either Err (Outcome ())
-end uuid =
-  hostOnly
-    ( \game ->
-        Outcome
-          { oState = Stopped
-          , oNotify = filter (\p -> (pId p) /= uuid) (sPlayers game)
-          , oResult = ()
-          }
-    )
-    uuid
-
-hostOnly :: (Game -> Outcome ()) -> UUID -> State -> Either Err (Outcome ())
-hostOnly f uuid = \case
-  Stopped -> Left UserErr
-  InProgress g ->
-    if uuid == sHost g
-      then Right (f g)
-      else Left AuthErr
+reveal :: UUID -> UUID -> State -> Either Err (State, Game)
+reveal gameId userId (State games) =
+  case M.lookup gameId games of
+    Nothing -> Left UserErr
+    Just game -> do
+      if userId /= gHost game
+        then Left UserErr
+        else
+          let (mNewGame, newState) =
+                M.updateLookupWithKey
+                  (\_ g -> Just $ g{gIsRevealed = True})
+                  gameId
+                  games
+           in case mNewGame of
+                Nothing -> Left UserErr
+                Just newGame -> Right (State newState, newGame)
 
 resetVote :: Player -> Player
 resetVote p = p{pVote = Nothing}
