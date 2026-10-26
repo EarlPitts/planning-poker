@@ -7,7 +7,7 @@ import Control.Concurrent.Chan
 import Data.List (find, groupBy, sortOn)
 import Data.Map (Map)
 import qualified Data.Map as M
-import Data.Maybe (catMaybes, fromJust)
+import Data.Maybe (catMaybes)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.UUID
@@ -195,16 +195,18 @@ modifyVote gameId userId vote (State games) = case M.lookup gameId games of
 playerJoin :: UUID -> Player -> State -> Either Err (State, Game)
 playerJoin gameId player (State games) = case M.lookup gameId games of
   Nothing -> Left UserErr
-  Just game -> do
-    let (mNewGame, newState) =
-          -- TODO check if user with same name exists
-          M.updateLookupWithKey
-            (\_ g -> Just $ g{gPlayers = player : gPlayers game})
-            gameId
-            games
-    case mNewGame of
-      Nothing -> Left UserErr
-      Just newGame -> Right (State newState, newGame)
+  Just game ->
+    if any (\p -> pName p == pName player) (gPlayers game)
+      then Left UserErr
+      else
+        let (mNewGame, newState) =
+              M.updateLookupWithKey
+                (\_ g -> Just $ g{gPlayers = player : gPlayers game})
+                gameId
+                games
+         in case mNewGame of
+              Nothing -> Left UserErr
+              Just newGame -> Right (State newState, newGame)
 
 resetVote :: Player -> Player
 resetVote p = p{pVote = Nothing}
