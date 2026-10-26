@@ -60,7 +60,7 @@ data State = State
   deriving (Eq, Show)
 
 data Game = Game
-  { gPlayers :: [Player]
+  { gPlayers :: [Player] -- TODO make this a NEL
   , gIsRevealed :: Bool
   , gHost :: UUID
   }

@@ -68,6 +68,7 @@ test-suite planning-poker-test
     , async
     , base
     , bytestring
+    , containers
     , hspec
     , hspec-wai
     , http-types
