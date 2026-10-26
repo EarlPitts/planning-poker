@@ -172,6 +172,26 @@ reveal gameId userId (State games) =
                 Nothing -> Left UserErr
                 Just newGame -> Right (State newState, newGame)
 
+modifyVote :: UUID -> UUID -> Vote -> State -> Either Err (State, Game)
+modifyVote gameId userId vote (State games) = case M.lookup gameId games of
+  Nothing -> Left UserErr
+  Just game -> do
+    case findPlayer userId game of
+      Nothing -> Left UserErr
+      Just p -> do
+        let newPlayer = changeVote p vote
+            (mNewGame, newState) =
+              M.updateLookupWithKey
+                ( \_ g ->
+                    let ps = fmap (\p' -> if pId p' == pId p then newPlayer else p') (gPlayers game)
+                     in Just $ g{gPlayers = ps}
+                )
+                gameId
+                games
+        case mNewGame of
+          Nothing -> Left UserErr
+          Just newGame -> Right (State newState, newGame)
+
 resetVote :: Player -> Player
 resetVote p = p{pVote = Nothing}
 
