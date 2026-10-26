@@ -30,6 +30,7 @@ library
     , base
     , binary
     , bytestring
+    , containers
     , directory
     , file-embed
     , http-types
