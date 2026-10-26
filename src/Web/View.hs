@@ -107,22 +107,23 @@ voteButtons gameId = traverse_ (btn . T.pack . show) ([minBound .. maxBound] :: 
 
 hostView :: UUID -> Html ()
 hostView gameId = div_ [id_ "host-view"] $ do
-  button_
-    [ hxPost_ $ (toText gameId) <> "/reveal"
-    , hxSwap_ "none"
-    ]
-    "Reveal"
-  button_
-    [ hxPost_ $ (toText gameId) <> "/reset"
-    , hxSwap_ "none"
-    ]
-    "Reset Votes"
-  -- button_
-  --   [ hxPost_ "/end"
-  --   , hxTarget_ "#host-view"
-  --   , hxSwap_ "outerHTML"
-  --   ]
-  --   "End"
+  div_ $ do
+    button_
+      [ hxPost_ $ (toText gameId) <> "/reveal"
+      , hxSwap_ "none"
+      ]
+      "Reveal"
+    button_
+      [ hxPost_ $ (toText gameId) <> "/reset"
+      , hxSwap_ "none"
+      ]
+      "Reset Votes"
+  div_ $
+    button_
+      [ type_ "button"
+      , onclick_ "navigator.clipboard.writeText(window.location.href)"
+      ]
+      "Copy Link to Clipboard"
 
 viewPlayer :: Bool -> Player -> Html ()
 viewPlayer revealed Player{..} = div_ [class_ "player"] $ do
