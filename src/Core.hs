@@ -100,11 +100,11 @@ withGame' gameId f (State games) = case M.lookup gameId games of
     Left err -> Left err
     Right newGame -> Right $ State (M.adjust (const newGame) gameId games)
 
-playerJoin :: Player -> Game -> Either Err Game
-playerJoin p game@Game{..} =
-  if any (\o -> pName p == pName o) gPlayers
-    then Left UserErr
-    else Right $ game{gPlayers = p : gPlayers}
+-- playerJoin :: Player -> Game -> Either Err Game
+-- playerJoin p game@Game{..} =
+--   if any (\o -> pName p == pName o) gPlayers
+--     then Left UserErr
+--     else Right $ game{gPlayers = p : gPlayers}
 
 findGame :: UUID -> State -> Maybe Game
 findGame uuid (State games) = games M.!? uuid
@@ -191,6 +191,20 @@ modifyVote gameId userId vote (State games) = case M.lookup gameId games of
         case mNewGame of
           Nothing -> Left UserErr
           Just newGame -> Right (State newState, newGame)
+
+playerJoin :: UUID -> Player -> State -> Either Err (State, Game)
+playerJoin gameId player (State games) = case M.lookup gameId games of
+  Nothing -> Left UserErr
+  Just game -> do
+    let (mNewGame, newState) =
+          -- TODO check if user with same name exists
+          M.updateLookupWithKey
+            (\_ g -> Just $ g{gPlayers = player : gPlayers game})
+            gameId
+            games
+    case mNewGame of
+      Nothing -> Left UserErr
+      Just newGame -> Right (State newState, newGame)
 
 resetVote :: Player -> Player
 resetVote p = p{pVote = Nothing}

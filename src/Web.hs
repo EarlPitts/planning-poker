@@ -112,7 +112,7 @@ app h = do
     gameId <- getGameId
     userId <- getUserId
 
-    result <- liftIO $ atomically $ transact (hState h) $ (reveal gameId userId)
+    result <- liftIO $ atomically $ transact (hState h) $ reveal gameId userId
 
     case result of
       Left _ -> Scotty.status badRequest400
@@ -123,7 +123,7 @@ app h = do
     gameId <- getGameId
     userId <- getUserId
 
-    result <- liftIO $ atomically $ transact (hState h) $ (reset gameId userId)
+    result <- liftIO $ atomically $ transact (hState h) $ reset gameId userId
 
     case result of
       Left _ -> Scotty.status badRequest400
@@ -139,39 +139,28 @@ app h = do
       Just game -> do
         mUserIdStr <- Scotty.getCookie "userId"
         let mUserId = fromText =<< mUserIdStr
-        Scotty.html $ renderText (gameView gameId mUserId game)
+        Scotty.html $ renderText $ gameView gameId mUserId game
 
   Scotty.post "/:gameId/join" $ do
     gameId <- getGameId
+    name <- Scotty.formParam "name" -- TODO validate this?
+    p <- liftIO $ createPlayer name
 
-    (State games) <- liftIO $ readTVarIO (hState h)
-    case M.lookup gameId games of
-      Nothing -> Scotty.status notFound404
-      Just game -> do
-        name <- Scotty.formParam "name"
-        p <- liftIO $ createPlayer name
+    result <- liftIO $ atomically $ transact (hState h) $ playerJoin gameId p
 
-        (State state) <- liftIO $
-          atomically $ do
-            modifyTVar
-              (hState h)
-              ( \(State games) ->
-                  State $
-                    M.adjust (\game -> game{gPlayers = p : gPlayers game}) gameId games
-              )
-            readTVar (hState h)
-
-        let game = state ! gameId
+    case result of
+      Left _ -> Scotty.status badRequest400
+      Right (_, game) -> do
         liftIO $ sendUpdate (gPlayers game) gameId game
         Scotty.setSimpleCookie "userId" (toText $ pId p)
-        Scotty.html $ renderText (playerView (pId p) gameId game)
+        Scotty.html $ renderText $ playerView (pId p) gameId game
 
   Scotty.post "/:gameId/vote/:vote" $ do
     userId <- getUserId
     gameId <- getGameId
     vote <- getVote
 
-    result <- liftIO $ atomically $ transact (hState h) $ (modifyVote gameId userId vote)
+    result <- liftIO $ atomically $ transact (hState h) $ modifyVote gameId userId vote
 
     case result of
       Left _ -> Scotty.status badRequest400
@@ -179,20 +168,15 @@ app h = do
         liftIO $ sendUpdate (gPlayers game) gameId game
 
   Scotty.get "/:gameId/player" $ do
-    mGameId <- fromText <$> Scotty.pathParam "gameId"
-    case mGameId of
-      Nothing -> Scotty.status badRequest400
-      Just gameId -> do
-        (State games) <- liftIO $ readTVarIO (hState h)
-        case M.lookup gameId games of
-          Nothing -> Scotty.status notFound404
-          Just game -> do
-            mUserIdStr <- Scotty.getCookie "userId"
-            case fromText =<< mUserIdStr of
-              Nothing -> Scotty.status notFound404
-              Just userId -> case findPlayer userId game of
-                Nothing -> Scotty.status notFound404
-                Just p -> Scotty.nested (eventSourceAppChan (pChan p))
+    userId <- getUserId
+    gameId <- getGameId
+
+    (State games) <- liftIO $ readTVarIO (hState h)
+    case M.lookup gameId games of
+      Nothing -> Scotty.status notFound404
+      Just game -> case findPlayer userId game of
+        Nothing -> Scotty.status notFound404
+        Just p -> Scotty.nested (eventSourceAppChan (pChan p))
 
 createPlayer :: Text -> IO Player
 createPlayer name = do
