@@ -63,12 +63,14 @@ joinRequest application name =
 
 fakeGameId = fromJust (fromString "902d870d-11b3-46cd-8296-6a9cf1a376c2")
 fakeHostId = fromJust (fromString "902d870d-11b3-46cd-8296-6a9cf1a376c2")
-testInitState = State $ M.fromList [(fakeGameId, Game [] False fakeHostId)]
+fakeInitGame = Game [] False fakeHostId
+testInitState = State $ M.fromList [(fakeGameId, fakeInitGame)]
 
 main :: IO ()
 main = hspec $ do
   testsCore
-  -- testsRoute
+
+-- testsRoute
 
 testsCore :: Spec
 testsCore = do
@@ -76,18 +78,18 @@ testsCore = do
     property $ \p1 p2 ->
       pName p1
         /= pName p2
-          ==> case playerJoin fakeGameId p1 testInitState of
-            Right (newState, _) ->
-              case playerJoin fakeGameId p2 newState of
-                Right (_, _) -> succeeded
+          ==> case playerJoin p1 fakeInitGame of
+            Right game ->
+              case playerJoin p2 game of
+                Right _ -> succeeded
                 _ -> failed
             _ -> failed
 
   it "joining with existing name fails" $ do
     property $ \p1 p2 ->
-      case playerJoin fakeGameId p1 testInitState of
-        Right (newState, _) ->
-          case playerJoin fakeGameId p2{pName = pName p1} newState of
+      case playerJoin p1 fakeInitGame of
+        Right game ->
+          case playerJoin p2{pName = pName p1} game of
             Left UserErr -> succeeded
             _ -> failed
         _ -> failed
@@ -113,29 +115,19 @@ testsCore = do
               }
        in findPlayer (pId player) game == Nothing
 
-  it "cannot modify vote in non-existent game" $ do
-    property $ \gameId userId vote ->
-      modifyVote gameId userId vote (State $ M.fromList []) == Left UserErr
-
   it "voting for player works" $ do
     property $ \player others vote revealed host -> do
       let others' = filter (\o -> (pId o) /= (pId player)) others
-          state =
-            State $
-              M.fromList
-                [
-                  ( fakeGameId
-                  , Game
-                      { gPlayers = (player : others')
-                      , gIsRevealed = revealed
-                      , gHost = host
-                      }
-                  )
-                ]
+          game =
+            Game
+              { gPlayers = (player : others')
+              , gIsRevealed = revealed
+              , gHost = host
+              }
 
-      let Right (_, game) = modifyVote fakeGameId (pId player) vote state
+      let Right game' = modifyVote (pId player) vote game
 
-      let finalVote = pVote <$> findPlayer (pId player) game
+      let finalVote = pVote <$> findPlayer (pId player) game'
       finalVote === Just (Just vote)
 
   it "computing the average of votes works" $ do
@@ -156,6 +148,20 @@ testsCore = do
 
     pVote top `shouldBe` Just Five
     pVote bot `shouldBe` Just Instant
+
+  it "resets votes as host" $ do
+    property $ \player others revealed host -> do
+      let others' = filter (\o -> (pId o) /= (pId player)) others
+          game =
+            Game
+              { gPlayers = (player : others')
+              , gIsRevealed = revealed
+              , gHost = host
+              }
+
+      let Right game' = reset host game
+      let finalVotes = pVote <$> gPlayers game'
+      all ((==) Nothing) finalVotes
 
 mkApp :: State -> IO Application
 mkApp state = do
@@ -203,11 +209,11 @@ mkApp' s = do
 --         request methodGet "/player" [(hCookie, "playerId=" <> (toASCIIBytes nonExistingUUID))] ""
 --           `shouldRespondWith` 401
 
-  -- describe "POST /join" $ do
-  --   it "no race condition while joining" $ do
-  --     stateRef <- liftIO $ newTVarIO initState
-  --     application <- mkApp' stateRef
-  --     let names = (BC.pack . show) <$> ([1 .. 100] :: [Int])
-  --     _ <- mapConcurrently_ (joinRequest application) names
-  --     state <- readTVarIO stateRef
-  --     (length $ getPlayers state) `shouldBe` 100
+-- describe "POST /join" $ do
+--   it "no race condition while joining" $ do
+--     stateRef <- liftIO $ newTVarIO initState
+--     application <- mkApp' stateRef
+--     let names = (BC.pack . show) <$> ([1 .. 100] :: [Int])
+--     _ <- mapConcurrently_ (joinRequest application) names
+--     state <- readTVarIO stateRef
+--     (length $ getPlayers state) `shouldBe` 100

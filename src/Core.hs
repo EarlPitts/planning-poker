@@ -94,8 +94,8 @@ mkVote _ = Nothing
 initState :: State
 initState = State mempty
 
-withGame :: UUID -> State -> (Game -> Either Err Game) -> Either Err (State, Game)
-withGame gameId (State games) f = case M.lookup gameId games of
+withGame :: UUID -> (Game -> Either Err Game) -> State -> Either Err (State, Game)
+withGame gameId f (State games) = case M.lookup gameId games of
   Nothing -> Left UserErr
   Just game -> case f game of
     Left err -> Left err
@@ -136,8 +136,8 @@ changeVote p v = p{pVote = Just v}
 hostAuth :: UUID -> Game -> Either Err ()
 hostAuth userId game = when (userId /= gHost game) (Left UserErr)
 
-reset :: UUID -> UUID -> State -> Either Err (State, Game)
-reset gameId userId state = withGame gameId state $ \game -> do
+reset :: UUID -> Game -> Either Err Game
+reset userId game = do
   hostAuth userId game
   pure
     game
@@ -145,20 +145,20 @@ reset gameId userId state = withGame gameId state $ \game -> do
       , gPlayers = resetVote <$> gPlayers game
       }
 
-reveal :: UUID -> UUID -> State -> Either Err (State, Game)
-reveal gameId userId state = withGame gameId state $ \game -> do
+reveal :: UUID -> Game -> Either Err Game
+reveal userId game = do
   hostAuth userId game
   pure game{gIsRevealed = True}
 
-modifyVote :: UUID -> UUID -> Vote -> State -> Either Err (State, Game)
-modifyVote gameId userId vote state = withGame gameId state $ \game -> do
+modifyVote :: UUID -> Vote -> Game -> Either Err Game
+modifyVote userId vote game = do
   p <- maybe (Left UserErr) Right $ findPlayer userId game
   let newPlayer = changeVote p vote
   let ps = fmap (\p' -> if pId p' == pId p then newPlayer else p') (gPlayers game)
   pure game{gPlayers = ps}
 
-playerJoin :: UUID -> Player -> State -> Either Err (State, Game)
-playerJoin gameId player state = withGame gameId state $ \game -> do
+playerJoin :: Player -> Game -> Either Err Game
+playerJoin player game = do
   when (any (\p -> pName p == pName player) (gPlayers game)) (Left UserErr)
   pure game{gPlayers = player : gPlayers game}
 

@@ -110,7 +110,7 @@ app h = do
     gameId <- getGameId
     userId <- getUserId
 
-    result <- liftIO $ atomically $ transact (hState h) $ reveal gameId userId
+    result <- commit h $ withGame gameId (reveal userId)
 
     case result of
       Left _ -> Scotty.status badRequest400
@@ -121,7 +121,7 @@ app h = do
     gameId <- getGameId
     userId <- getUserId
 
-    result <- liftIO $ atomically $ transact (hState h) $ reset gameId userId
+    result <- commit h $ withGame gameId (reset userId)
 
     case result of
       Left _ -> Scotty.status badRequest400
@@ -144,7 +144,7 @@ app h = do
     name <- Scotty.formParam "name" -- TODO validate this?
     p <- liftIO $ createPlayer name
 
-    result <- liftIO $ atomically $ transact (hState h) $ playerJoin gameId p
+    result <- commit h $ withGame gameId (playerJoin p)
 
     case result of
       Left _ -> Scotty.status badRequest400
@@ -158,7 +158,7 @@ app h = do
     gameId <- getGameId
     vote <- getVote
 
-    result <- liftIO $ atomically $ transact (hState h) $ modifyVote gameId userId vote
+    result <- commit h $ withGame gameId (modifyVote userId vote)
 
     case result of
       Left _ -> Scotty.status badRequest400
@@ -169,7 +169,7 @@ app h = do
     userId <- getUserId
     gameId <- getGameId
 
-    result <- liftIO $ atomically $ transact (hState h) $ getChannel gameId userId
+    result <- commit h $ getChannel gameId userId -- TODO this is not really a commit
 
     case result of
       Left _ -> Scotty.status badRequest400
@@ -213,3 +213,6 @@ getVote = do
   case mVote of
     Nothing -> Scotty.status badRequest400 >> finish
     Just vote -> pure vote
+
+commit :: Handle -> (State -> Either Err (State, a)) -> ActionM (Either Err (State, a))
+commit h = liftIO . atomically . transact (hState h)
