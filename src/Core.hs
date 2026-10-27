@@ -4,6 +4,7 @@
 module Core where
 
 import Control.Concurrent.Chan
+import Control.Monad (when)
 import Data.List (find, groupBy, sortOn)
 import Data.Map (Map)
 import qualified Data.Map as M
@@ -93,12 +94,12 @@ mkVote _ = Nothing
 initState :: State
 initState = State mempty
 
-withGame' :: UUID -> (Game -> Either Err Game) -> State -> Either Err State
-withGame' gameId f (State games) = case M.lookup gameId games of
+withGame :: UUID -> State -> (Game -> Either Err Game) -> Either Err (State, Game)
+withGame gameId (State games) f = case M.lookup gameId games of
   Nothing -> Left UserErr
   Just game -> case f game of
     Left err -> Left err
-    Right newGame -> Right $ State (M.adjust (const newGame) gameId games)
+    Right newGame -> Right $ (State (M.insert gameId newGame games), newGame)
 
 -- playerJoin :: Player -> Game -> Either Err Game
 -- playerJoin p game@Game{..} =
@@ -132,81 +133,34 @@ playerExists uuid game = maybe False (const True) $ findPlayer uuid game
 changeVote :: Player -> Vote -> Player
 changeVote p v = p{pVote = Just v}
 
+hostAuth :: UUID -> Game -> Either Err ()
+hostAuth userId game = when (userId /= gHost game) (Left UserErr)
+
 reset :: UUID -> UUID -> State -> Either Err (State, Game)
-reset gameId userId (State games) =
-  case M.lookup gameId games of
-    Nothing -> Left UserErr
-    Just game -> do
-      if userId /= gHost game
-        then Left UserErr
-        else
-          let (mNewGame, newState) =
-                M.updateLookupWithKey
-                  ( \_ g ->
-                      Just $
-                        g
-                          { gIsRevealed = False
-                          , gPlayers = resetVote <$> gPlayers game
-                          }
-                  )
-                  gameId
-                  games
-           in case mNewGame of
-                Nothing -> Left UserErr
-                Just newGame -> Right (State newState, newGame)
+reset gameId userId state = withGame gameId state $ \game -> do
+  hostAuth userId game
+  pure
+    game
+      { gIsRevealed = False
+      , gPlayers = resetVote <$> gPlayers game
+      }
 
 reveal :: UUID -> UUID -> State -> Either Err (State, Game)
-reveal gameId userId (State games) =
-  case M.lookup gameId games of
-    Nothing -> Left UserErr
-    Just game -> do
-      if userId /= gHost game
-        then Left UserErr
-        else
-          let (mNewGame, newState) =
-                M.updateLookupWithKey
-                  (\_ g -> Just $ g{gIsRevealed = True})
-                  gameId
-                  games
-           in case mNewGame of
-                Nothing -> Left UserErr
-                Just newGame -> Right (State newState, newGame)
+reveal gameId userId state = withGame gameId state $ \game -> do
+  hostAuth userId game
+  pure game{gIsRevealed = True}
 
 modifyVote :: UUID -> UUID -> Vote -> State -> Either Err (State, Game)
-modifyVote gameId userId vote (State games) = case M.lookup gameId games of
-  Nothing -> Left UserErr
-  Just game -> do
-    case findPlayer userId game of
-      Nothing -> Left UserErr
-      Just p -> do
-        let newPlayer = changeVote p vote
-            (mNewGame, newState) =
-              M.updateLookupWithKey
-                ( \_ g ->
-                    let ps = fmap (\p' -> if pId p' == pId p then newPlayer else p') (gPlayers game)
-                     in Just $ g{gPlayers = ps}
-                )
-                gameId
-                games
-        case mNewGame of
-          Nothing -> Left UserErr
-          Just newGame -> Right (State newState, newGame)
+modifyVote gameId userId vote state = withGame gameId state $ \game -> do
+  p <- maybe (Left UserErr) Right $ findPlayer userId game
+  let newPlayer = changeVote p vote
+  let ps = fmap (\p' -> if pId p' == pId p then newPlayer else p') (gPlayers game)
+  pure game{gPlayers = ps}
 
 playerJoin :: UUID -> Player -> State -> Either Err (State, Game)
-playerJoin gameId player (State games) = case M.lookup gameId games of
-  Nothing -> Left UserErr
-  Just game ->
-    if any (\p -> pName p == pName player) (gPlayers game)
-      then Left UserErr
-      else
-        let (mNewGame, newState) =
-              M.updateLookupWithKey
-                (\_ g -> Just $ g{gPlayers = player : gPlayers game})
-                gameId
-                games
-         in case mNewGame of
-              Nothing -> Left UserErr
-              Just newGame -> Right (State newState, newGame)
+playerJoin gameId player state = withGame gameId state $ \game -> do
+  when (any (\p -> pName p == pName player) (gPlayers game)) (Left UserErr)
+  pure game{gPlayers = player : gPlayers game}
 
 resetVote :: Player -> Player
 resetVote p = p{pVote = Nothing}
