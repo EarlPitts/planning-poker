@@ -82,11 +82,17 @@ connectionView userId gameId Game{..} =
 playerView :: UUID -> UUID -> Game -> Html ()
 playerView userId gameId Game{..} = div_ [id_ "player-view"] $ do
   let (p, rest) = partition (\p -> pId p == userId) gPlayers
-  div_ [class_ "player-list"] $ do
-    traverse_ (viewPlayer True) p
-    traverse_ (viewPlayer gIsRevealed) rest
-  when gIsRevealed $ statView gPlayers
-  voteButtons gameId
+  if any id (pBanned <$> p)
+    then bannedView
+    else do
+      div_ [class_ "player-list"] $ do
+        traverse_ (viewPlayer True) p
+        traverse_ (viewPlayer gIsRevealed) rest
+      when gIsRevealed $ statView gPlayers
+      voteButtons gameId
+
+bannedView :: Html ()
+bannedView = "You have been kicked out"
 
 statView :: [Player] -> Html ()
 statView ps = div_ [] $ do
@@ -128,14 +134,16 @@ hostView gameId = div_ [id_ "host-view"] $ do
       "Copy Link to Clipboard"
 
 viewPlayer :: Bool -> Player -> Html ()
-viewPlayer revealed Player{..} = div_ [class_ "player"] $ do
-  span_ $ toHtml pName
-  ":"
-  span_ [class_ "vote"] $
-    case (revealed, pVote) of
-      (True, _) -> viewVote pVote
-      (False, Nothing) -> "🂠"
-      (False, _) -> "🂡"
+viewPlayer revealed Player{..} =
+  when (not pBanned) $
+    div_ [class_ "player"] $ do
+      span_ $ toHtml pName
+      ":"
+      span_ [class_ "vote"] $
+        case (revealed, pVote) of
+          (True, _) -> viewVote pVote
+          (False, Nothing) -> "🂠"
+          (False, _) -> "🂡"
 
 viewVote :: Maybe Vote -> Html ()
 viewVote Nothing = "🂠"

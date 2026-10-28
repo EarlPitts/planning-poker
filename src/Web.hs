@@ -128,6 +128,18 @@ app h = do
       Right (_, game) ->
         liftIO $ sendUpdate (gPlayers game) gameId game
 
+  Scotty.post "/:gameId/kick/:userId" $ do
+    gameId <- getGameId
+    userId <- getUserId
+    userToKick <- getParamUserId
+
+    result <- commit h $ withGame gameId (kick userId userToKick)
+
+    case result of
+      Left _ -> Scotty.status badRequest400
+      Right (_, game) ->
+        liftIO $ sendUpdate (gPlayers game) gameId game
+
   Scotty.get "/:gameId" $ do
     gameId <- getGameId
 
@@ -203,6 +215,13 @@ getUserId = do
 getGameId :: ActionM UUID
 getGameId = do
   mGameId <- fromText <$> Scotty.pathParam "gameId"
+  case mGameId of
+    Nothing -> Scotty.status badRequest400 >> finish
+    Just gameId -> pure gameId
+
+getParamUserId :: ActionM UUID
+getParamUserId = do
+  mGameId <- fromText <$> Scotty.pathParam "userId"
   case mGameId of
     Nothing -> Scotty.status badRequest400 >> finish
     Just gameId -> pure gameId

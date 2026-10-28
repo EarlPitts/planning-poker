@@ -46,6 +46,7 @@ instance Show Vote where
 
 data Player = Player
   { pVote :: Maybe Vote
+  , pBanned :: Bool
   , pName :: T.Text
   , pId :: UUID
   , pChan :: Chan ServerEvent
@@ -119,7 +120,7 @@ initGame host =
     }
 
 newPlayer :: Text -> UUID -> Chan ServerEvent -> Player
-newPlayer = Player Nothing
+newPlayer = Player Nothing False
 
 findPlayer :: UUID -> Game -> Maybe Player
 findPlayer uuid Game{..} = find (\p -> pId p == uuid) gPlayers
@@ -149,6 +150,21 @@ reveal :: UUID -> Game -> Either Err Game
 reveal userId game = do
   hostAuth userId game
   pure game{gIsRevealed = True}
+
+kick :: UUID -> UUID -> Game -> Either Err Game
+kick userId userToKick game = do
+  hostAuth userId game
+  pure
+    game
+      { gPlayers =
+          fmap
+            ( \p ->
+                if pId p == userToKick
+                  then p{pBanned = True, pVote = Nothing}
+                  else p
+            )
+            (gPlayers game)
+      }
 
 modifyVote :: UUID -> Vote -> Game -> Either Err Game
 modifyVote userId vote game = do
