@@ -54,7 +54,7 @@ gameView gameId mUserId game = template "Planning Poker" $ do
   div_ [id_ "#game-view"] $ case mUserId of
     Nothing -> joinView gameId game
     Just userId -> do
-      playerView userId gameId game
+      connectionView userId gameId game
       when (userId == gHost game) (hostView gameId)
 
 joinView :: UUID -> Game -> Html ()
@@ -70,21 +70,23 @@ joinView gameId Game{..} =
         input_ [name_ "name", type_ "text", placeholder_ "Enter your name..."]
         button_ "Join"
 
-playerView :: UUID -> UUID -> Game -> Html ()
-playerView userId gameId Game{..} =
+connectionView :: UUID -> UUID -> Game -> Html ()
+connectionView userId gameId Game{..} =
   div_
-    [ id_ "player-view"
-    , sseConnect_ $ (toText gameId) <> "/player"
+    [ sseConnect_ $ (toText gameId) <> "/player"
     , sseSwap_ "message"
-    , hxSwap_ "outerHTML"
+    , hxSwap_ "player-view"
     ]
-    $ do
-      let (p, rest) = partition (\p -> pId p == userId) gPlayers
-      div_ [class_ "player-list"] $ do
-        traverse_ (viewPlayer True) p
-        traverse_ (viewPlayer gIsRevealed) rest
-      when gIsRevealed $ statView gPlayers
-      voteButtons gameId
+    $ playerView userId gameId Game{..}
+
+playerView :: UUID -> UUID -> Game -> Html ()
+playerView userId gameId Game{..} = div_ [id_ "player-view"] $ do
+  let (p, rest) = partition (\p -> pId p == userId) gPlayers
+  div_ [class_ "player-list"] $ do
+    traverse_ (viewPlayer True) p
+    traverse_ (viewPlayer gIsRevealed) rest
+  when gIsRevealed $ statView gPlayers
+  voteButtons gameId
 
 statView :: [Player] -> Html ()
 statView ps = div_ [] $ do

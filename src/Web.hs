@@ -151,7 +151,7 @@ app h = do
       Right (_, game) -> do
         liftIO $ sendUpdate (gPlayers game) gameId game
         Scotty.setSimpleCookie "userId" (toText $ pId p)
-        Scotty.html $ renderText $ playerView (pId p) gameId game
+        Scotty.html $ renderText $ connectionView (pId p) gameId game
 
   Scotty.post "/:gameId/vote/:vote" $ do
     userId <- getUserId
@@ -191,7 +191,7 @@ sendUpdate players gameId game =
     let channel = pChan p
         d = [B.fromLazyByteString $ renderBS (playerView (pId p) gameId game)]
         event = ServerEvent Nothing Nothing d
-     in writeChan channel event >> writeChan channel CloseEvent
+     in writeChan channel event
 
 getUserId :: ActionM UUID
 getUserId = do
