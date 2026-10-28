@@ -39,6 +39,7 @@ instance Arbitrary Player where
   arbitrary =
     Player
       <$> arbitrary
+      <*> arbitrary
       <*> (T.pack <$> arbitrary)
       <*> arbitrary
       <*> arbitrary
@@ -115,25 +116,27 @@ testsCore = do
               }
        in findPlayer (pId player) game == Nothing
 
-  it "voting for player works" $ do
-    property $ \player others vote revealed host -> do
-      let others' = filter (\o -> (pId o) /= (pId player)) others
-          game =
-            Game
-              { gPlayers = (player : others')
-              , gIsRevealed = revealed
-              , gHost = host
-              }
+  it "voting for not banned player works" $ do
+    property $ \player others vote revealed host ->
+      pBanned player
+        /= True ==> do
+          let others' = filter (\o -> (pId o) /= (pId player)) others
+              game =
+                Game
+                  { gPlayers = (player : others')
+                  , gIsRevealed = revealed
+                  , gHost = host
+                  }
 
-      let Right game' = modifyVote (pId player) vote game
+          let Right game' = modifyVote (pId player) vote game
 
-      let finalVote = pVote <$> findPlayer (pId player) game'
-      finalVote === Just (Just vote)
+          let finalVote = pVote <$> findPlayer (pId player) game'
+          finalVote === Just (Just vote)
 
   it "computing the average of votes works" $ do
     let votes = [Just One, Just Two, Just Instant, Nothing, Just OneAndHalf, Nothing, Just Five]
         uuid = fromJust (fromString "902d870d-11b3-46cd-8296-6a9cf1a376c2")
-        players = fmap (\v -> Player v "test" uuid dummyChannel) votes
+        players = fmap (\v -> Player v False "test" uuid dummyChannel) votes
 
     let average = voteAverage players
 
@@ -142,7 +145,7 @@ testsCore = do
   it "getting the top and bottom voter works" $ do
     let votes = [Just One, Just Two, Just Instant, Nothing, Just OneAndHalf, Nothing, Just Five]
         uuid = fromJust (fromString "902d870d-11b3-46cd-8296-6a9cf1a376c2")
-        players = fmap (\v -> Player v "test" uuid dummyChannel) votes
+        players = fmap (\v -> Player v False "test" uuid dummyChannel) votes
 
     let Just (top, bot) = fight players
 
