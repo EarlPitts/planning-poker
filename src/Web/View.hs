@@ -60,7 +60,7 @@ gameView gameId mUserId game = template "Planning Poker" $ do
 joinView :: UUID -> Game -> Html ()
 joinView gameId Game{..} =
   div_ [id_ "join-view"] $ do
-    traverse_ (viewPlayer gIsRevealed) gPlayers
+    traverse_ (viewPlayer gIsRevealed False gameId) gPlayers
     form_
       [ hxPost_ $ "/" <> (toText gameId) <> "/join"
       , hxTarget_ "#join-view"
@@ -82,12 +82,13 @@ connectionView userId gameId Game{..} =
 playerView :: UUID -> UUID -> Game -> Html ()
 playerView userId gameId Game{..} = div_ [id_ "player-view"] $ do
   let (p, rest) = partition (\p -> pId p == userId) gPlayers
+      isHost = userId == gHost
   if any id (pBanned <$> p)
     then bannedView
     else do
       div_ [class_ "player-list"] $ do
-        traverse_ (viewPlayer True) p
-        traverse_ (viewPlayer gIsRevealed) rest
+        traverse_ (viewPlayer True False gameId) p
+        traverse_ (viewPlayer gIsRevealed isHost gameId) rest
       when gIsRevealed $ statView gPlayers
       voteButtons gameId
 
@@ -133,10 +134,11 @@ hostView gameId = div_ [id_ "host-view"] $ do
       ]
       "Copy Link to Clipboard"
 
-viewPlayer :: Bool -> Player -> Html ()
-viewPlayer revealed Player{..} =
+viewPlayer :: Bool -> Bool -> UUID -> Player -> Html ()
+viewPlayer revealed hasKick gameId Player{..} =
   when (not pBanned) $
     div_ [class_ "player"] $ do
+      if hasKick then kickButton gameId pId else mempty
       span_ $ toHtml pName
       ":"
       span_ [class_ "vote"] $
@@ -144,6 +146,14 @@ viewPlayer revealed Player{..} =
           (True, _) -> viewVote pVote
           (False, Nothing) -> "🂠"
           (False, _) -> "🂡"
+
+kickButton :: UUID -> UUID -> Html ()
+kickButton gameId userToKick =
+  button_
+    [ hxPost_ $ (toText gameId) <> "/kick/" <> (toText userToKick)
+    , hxSwap_ "none"
+    ]
+    "X"
 
 viewVote :: Maybe Vote -> Html ()
 viewVote Nothing = "🂠"
