@@ -4,7 +4,7 @@
 module Core where
 
 import Control.Concurrent.Chan
-import Control.Monad (when)
+import Control.Monad (unless, when)
 import Data.List (find, groupBy, sortOn)
 import Data.Map (Map)
 import qualified Data.Map as M
@@ -169,6 +169,7 @@ kick userId userToKick game = do
 modifyVote :: UUID -> Vote -> Game -> Either Err Game
 modifyVote userId vote game = do
   p <- maybe (Left UserErr) Right $ findPlayer userId game
+  when (pBanned p) $ Left UserErr
   let newPlayer = changeVote p vote
   let ps = fmap (\p' -> if pId p' == pId p then newPlayer else p') (gPlayers game)
   pure game{gPlayers = ps}
