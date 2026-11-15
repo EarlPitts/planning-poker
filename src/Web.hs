@@ -26,6 +26,7 @@ import qualified Data.Map as M
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 import qualified Data.Text.Lazy as TL
 import Data.UUID
 import Data.UUID.V4
@@ -35,6 +36,7 @@ import Network.HTTP.Types.Status (badRequest400, notFound404, unauthorized401)
 import Network.Wai.EventSource (ServerEvent (..), eventSourceAppChan)
 import Web.Scotty (ActionM, ScottyM, finish)
 import qualified Web.Scotty as Scotty
+import Web.Scotty.Cookie (SetCookie (..))
 import qualified Web.Scotty.Cookie as Scotty
 
 import Core
@@ -103,8 +105,15 @@ app h = do
     let game = initGame host
     liftIO $ atomically $ addGame (hState h) gameId game
 
-    Scotty.setSimpleCookie "userId" (toText $ pId host)
-    Scotty.redirect $ "/" <> (TL.fromStrict $ toText gameId)
+    let path = "/" <> toText gameId
+        cookie =
+          Scotty.defaultSetCookie
+            { setCookieName = "userId"
+            , setCookieValue = toASCIIBytes (pId host)
+            , setCookiePath = Just (T.encodeUtf8 $ path)
+            }
+    Scotty.setCookie cookie
+    Scotty.redirect $ TL.fromStrict path
 
   Scotty.post "/:gameId/reveal" $ do
     gameId <- getGameId
